@@ -1,0 +1,29 @@
+symbol: BTC/USDT:USDT
+direction: short
+exchange: binance-futures
+testnet: true
+
+deposit_usdt: 50
+leverage: 1
+margin_mode: isolated
+reinvest_pct: 0
+
+filter_calc: bar_close
+entry_filters: []
+
+grid:
+  overlap_pct: 10
+  orders: 2
+  martingale_pct: 0
+  indent_pct: 0
+  log_distribution: 1
+  partial_placement: null
+  runaway_cancel_pct: 0
+
+include_existing_position: false
+
+take_profit_pct: 1
+profit_currency: USDT
+trailing_take: null
+stop_loss: null
+halt_after_loss: false
