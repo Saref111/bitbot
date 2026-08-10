@@ -105,6 +105,18 @@ describe('configSchema — valid configs', () => {
     config.margin_mode = margin_mode;
     expect(configSchema.safeParse(config).success).toBe(true);
   });
+
+  it.each(['1m', '5m', '15m', '30m', '1h'])('accepts entry_filters timeframe: %s', (timeframe) => {
+    const config = validConfig();
+    config.entry_filters = [{ indicator: 'RSI', timeframe, period: 14, op: '<', value: 55 }];
+    expect(configSchema.safeParse(config).success).toBe(true);
+  });
+
+  it('accepts an arbitrary indicator string (intentionally open for future filters)', () => {
+    const config = validConfig();
+    config.entry_filters = [{ indicator: 'MACD', timeframe: '1h', period: 14, op: '<', value: 55 }];
+    expect(configSchema.safeParse(config).success).toBe(true);
+  });
 });
 
 describe('configSchema — invalid configs', () => {
@@ -243,6 +255,22 @@ describe('configSchema — invalid configs', () => {
     const result = configSchema.safeParse(config);
     expect(result.success).toBe(false);
     expect(messages(result).join('\n')).toMatch(/entry_filters\.0\.period/);
+  });
+
+  it('rejects an unsupported entry_filters timeframe (e.g. 4h — MVP §13.1 caps at 1h)', () => {
+    const config = validConfig();
+    config.entry_filters = [{ indicator: 'RSI', timeframe: '4h', period: 14, op: '<', value: 55 }];
+    const result = configSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    expect(messages(result).join('\n')).toMatch(/entry_filters\.0\.timeframe/);
+  });
+
+  it('rejects filter_calc: per_minute (not implemented — MVP §2)', () => {
+    const config = validConfig();
+    config.filter_calc = 'per_minute';
+    const result = configSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    expect(messages(result).join('\n')).toMatch(/filter_calc/);
   });
 
   it('rejects take_profit_pct <= 0', () => {

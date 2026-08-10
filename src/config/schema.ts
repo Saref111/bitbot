@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
+// MVP §13.1: supported filter timeframes cap at 1h (4h+ not implemented yet).
+export const supportedTimeframes = ['1m', '5m', '15m', '30m', '1h'] as const;
+
 export const entryFilterSchema = z.object({
+  // Intentionally free-form: more indicators are meant to be added later (MVP §3).
   indicator: z.string().min(1),
-  timeframe: z.string().min(1),
+  timeframe: z.enum(supportedTimeframes),
   period: z.number().int().positive(),
   op: z.enum(['<', '>']),
   value: z.number(),
@@ -35,7 +39,8 @@ export const configSchema = z
     margin_mode: z.enum(['cross', 'isolated']),
     reinvest_pct: z.number().min(0).max(100),
 
-    filter_calc: z.enum(['bar_close', 'per_minute']),
+    // per_minute is a documented placeholder (MVP §2) but not implemented yet.
+    filter_calc: z.literal('bar_close'),
     entry_filters: z.array(entryFilterSchema),
 
     grid: gridConfigSchema,
