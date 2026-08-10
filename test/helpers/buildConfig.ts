@@ -6,6 +6,8 @@ export function buildConfig(
     leverage?: number;
     direction?: Config['direction'];
     grid?: Partial<GridConfig>;
+    take_profit_pct?: number;
+    stop_loss?: number | null;
   } = {},
 ): Config {
   return {
@@ -30,10 +32,10 @@ export function buildConfig(
       ...overrides.grid,
     },
     include_existing_position: false,
-    take_profit_pct: 0.9,
+    take_profit_pct: overrides.take_profit_pct ?? 0.9,
     profit_currency: 'USDT',
     trailing_take: null,
-    stop_loss: null,
+    stop_loss: overrides.stop_loss ?? null,
     halt_after_loss: false,
   };
 }
