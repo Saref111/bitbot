@@ -9,11 +9,6 @@ import type { GridPlan, GridRung } from './types.js';
  * check", enforced by construction rather than validated separately.
  */
 export function projectGrid(config: Config, entryPrice: number, dealId: string): GridPlan {
-  if (config.direction !== 'long') {
-    throw new Error(
-      'projectGrid: short direction is not implemented yet (Slice 2 covers long only)',
-    );
-  }
   if (!(entryPrice > 0)) {
     throw new Error('projectGrid: entryPrice must be positive');
   }

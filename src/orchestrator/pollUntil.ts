@@ -1,12 +1,8 @@
+import { sleep } from '../util/time.js';
+
 export interface PollOptions {
   intervalMs: number;
   timeoutMs: number;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 /**

@@ -1,5 +1,5 @@
 symbol: BTC/USDT:USDT
-direction: short
+direction: long
 exchange: binance-futures
 testnet: true
 

@@ -53,11 +53,6 @@ describe('projectGrid — basic shape', () => {
     expect(plan.rungs[0]?.depthPct).toBeCloseTo(0, 9);
     expect(plan.rungs[1]?.depthPct).toBeCloseTo(10, 9);
   });
-
-  it('rejects short direction as not implemented (Slice 2 covers long only)', () => {
-    const config = buildConfig({ direction: 'short' });
-    expect(() => projectGrid(config, SURVIVOR_ENTRY_PRICE, 'deal-1')).toThrow(/short/i);
-  });
 });
 
 const gridParamsArb = fc

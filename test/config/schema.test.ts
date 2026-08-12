@@ -94,12 +94,6 @@ describe('configSchema — valid configs', () => {
     expect(configSchema.safeParse(config).success).toBe(true);
   });
 
-  it('accepts direction: short', () => {
-    const config = validConfig();
-    config.direction = 'short';
-    expect(configSchema.safeParse(config).success).toBe(true);
-  });
-
   it.each(['cross', 'isolated'])('accepts margin_mode: %s', (margin_mode) => {
     const config = validConfig();
     config.margin_mode = margin_mode;
@@ -220,6 +214,14 @@ describe('configSchema — invalid configs', () => {
   it('rejects invalid direction enum value', () => {
     const config = validConfig();
     config.direction = 'up';
+    const result = configSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    expect(messages(result).join('\n')).toMatch(/direction/);
+  });
+
+  it('rejects direction: short (not implemented yet — MVP scope is long only)', () => {
+    const config = validConfig();
+    config.direction = 'short';
     const result = configSchema.safeParse(config);
     expect(result.success).toBe(false);
     expect(messages(result).join('\n')).toMatch(/direction/);

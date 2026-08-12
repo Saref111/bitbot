@@ -75,13 +75,6 @@ describe('decide — tp_filled / sl_filled', () => {
 });
 
 describe('decide — guards', () => {
-  it('rejects short direction as not implemented (same policy as projectGrid)', () => {
-    const config = buildConfig({ direction: 'short' });
-    expect(() =>
-      decide({ config, filledRungsCount: 1, avgEntry: 1900, event: 'rung_filled' }),
-    ).toThrow(/short/i);
-  });
-
   it('rejects filledRungsCount = 0 (decide() assumes a fill already happened)', () => {
     const config = buildConfig();
     expect(() =>
