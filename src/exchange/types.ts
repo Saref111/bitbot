@@ -50,17 +50,21 @@ export interface FundingRateInfo {
 }
 
 export interface ExchangeAdapter {
-  setupSymbol(symbol: string, leverage: number, marginMode: 'cross' | 'isolated'): Promise<void>;
-  getMarketInfo(symbol: string): Promise<MarketInfo>;
-  fetchOHLCV(
+  setupSymbol: (
+    symbol: string,
+    leverage: number,
+    marginMode: 'cross' | 'isolated',
+  ) => Promise<void>;
+  getMarketInfo: (symbol: string) => Promise<MarketInfo>;
+  fetchOHLCV: (
     symbol: string,
     timeframe: Timeframe,
     since?: number,
     limit?: number,
-  ): Promise<Candle[]>;
-  fetchPosition(symbol: string): Promise<Position>;
-  createOrder(params: CreateOrderParams): Promise<PlacedOrder>;
-  fetchOpenOrders(symbol: string): Promise<OpenOrder[]>;
-  cancelAll(symbol: string): Promise<void>;
-  fetchFundingRate(symbol: string): Promise<FundingRateInfo>;
+  ) => Promise<Candle[]>;
+  fetchPosition: (symbol: string) => Promise<Position>;
+  createOrder: (params: CreateOrderParams) => Promise<PlacedOrder>;
+  fetchOpenOrders: (symbol: string) => Promise<OpenOrder[]>;
+  cancelAll: (symbol: string) => Promise<void>;
+  fetchFundingRate: (symbol: string) => Promise<FundingRateInfo>;
 }
