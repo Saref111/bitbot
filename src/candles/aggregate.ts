@@ -1,15 +1,8 @@
 import { requireAt } from '../util/arrays.js';
+import { TIMEFRAME_DURATION_MS } from './types.js';
 import type { Candle, Timeframe } from './types.js';
 
-const ONE_MINUTE_MS = 60_000;
-
-const TIMEFRAME_DURATION_MS: Record<Timeframe, number> = {
-  '1m': ONE_MINUTE_MS,
-  '5m': 5 * ONE_MINUTE_MS,
-  '15m': 15 * ONE_MINUTE_MS,
-  '30m': 30 * ONE_MINUTE_MS,
-  '1h': 60 * ONE_MINUTE_MS,
-};
+const ONE_MINUTE_MS = TIMEFRAME_DURATION_MS['1m'];
 
 /**
  * MVP §13.1: one 1m stream is aggregated locally into higher timeframes;

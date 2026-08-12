@@ -9,11 +9,13 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "ccxt": "^4.5.73",
     "dotenv": "^16.4.5",
     "yaml": "^2.5.1",
     "zod": "^3.23.8"
