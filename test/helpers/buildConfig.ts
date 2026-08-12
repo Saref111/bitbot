@@ -1,4 +1,4 @@
-import type { Config, GridConfig } from '../../src/config/types.js';
+import type { Config, EntryFilter, GridConfig } from '../../src/config/types.js';
 
 export function buildConfig(
   overrides: {
@@ -8,6 +8,7 @@ export function buildConfig(
     grid?: Partial<GridConfig>;
     take_profit_pct?: number;
     stop_loss?: number | null;
+    entry_filters?: EntryFilter[];
   } = {},
 ): Config {
   return {
@@ -20,7 +21,7 @@ export function buildConfig(
     margin_mode: 'cross',
     reinvest_pct: 20,
     filter_calc: 'bar_close',
-    entry_filters: [],
+    entry_filters: overrides.entry_filters ?? [],
     grid: {
       overlap_pct: 35,
       orders: 14,

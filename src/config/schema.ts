@@ -30,7 +30,9 @@ export const gridConfigSchema = z
 export const configSchema = z
   .object({
     symbol: z.string().min(1),
-    direction: z.enum(['long', 'short']),
+    // 'short' is future work — narrowed here so it's rejected at config load,
+    // not deep inside grid math or the strategy classifier.
+    direction: z.enum(['long']),
     exchange: z.literal('binance-futures'),
     testnet: z.boolean(),
 

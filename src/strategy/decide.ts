@@ -15,9 +15,6 @@ function assertNever(value: never): never {
 export function decide(context: DecideContext): Intent {
   const { config, filledRungsCount, avgEntry, event } = context;
 
-  if (config.direction !== 'long') {
-    throw new Error('decide: short direction is not implemented yet (see projectGrid)');
-  }
   if (!(avgEntry > 0)) {
     throw new Error('decide: avgEntry must be positive');
   }
