@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { OrderNotFound } from 'ccxt';
 import { createBinanceAdapter } from '../../src/exchange/binanceAdapter.js';
+import { OrderNotFoundError } from '../../src/exchange/types.js';
 import type { CcxtLike } from '../../src/exchange/binanceAdapter.js';
 
 function makeMockClient(overrides: Partial<CcxtLike> = {}): CcxtLike {
@@ -13,6 +15,7 @@ function makeMockClient(overrides: Partial<CcxtLike> = {}): CcxtLike {
     fetchPositions: vi.fn().mockResolvedValue([]),
     createOrder: vi.fn(),
     fetchOpenOrders: vi.fn().mockResolvedValue([]),
+    cancelOrder: vi.fn().mockResolvedValue({}),
     cancelAllOrders: vi.fn().mockResolvedValue([]),
     fetchFundingRate: vi.fn(),
     ...overrides,
@@ -259,6 +262,48 @@ describe('createBinanceAdapter — createOrder', () => {
       reduceOnly: true,
     });
   });
+
+  it('treats a duplicate clientOrderId (-4116, verified on testnet) as idempotent success, not a failure (Slice 9: crash-retry after createOrder but before the DB write commits)', async () => {
+    const client = makeMockClient({
+      createOrder: vi
+        .fn()
+        .mockRejectedValue(
+          new Error('binanceusdm {"code":-4116,"msg":"ClientOrderId is duplicated."}'),
+        ),
+    });
+    const adapter = createBinanceAdapter(client);
+
+    const result = await adapter.createOrder({
+      symbol: 'ETH/USDT:USDT',
+      side: 'buy',
+      type: 'limit',
+      amount: 0.01,
+      price: 1897.74,
+      clientOrderId: 'deal-1-1',
+    });
+
+    expect(result).toEqual({ id: '', clientOrderId: 'deal-1-1', status: 'open' });
+  });
+
+  it('still throws on a genuinely different createOrder error', async () => {
+    const client = makeMockClient({
+      createOrder: vi
+        .fn()
+        .mockRejectedValue(new Error('binanceusdm {"code":-2019,"msg":"Margin is insufficient."}')),
+    });
+    const adapter = createBinanceAdapter(client);
+
+    await expect(
+      adapter.createOrder({
+        symbol: 'ETH/USDT:USDT',
+        side: 'buy',
+        type: 'limit',
+        amount: 0.01,
+        price: 1897.74,
+        clientOrderId: 'deal-1-1',
+      }),
+    ).rejects.toThrow(/Margin is insufficient/);
+  });
 });
 
 describe('createBinanceAdapter — fetchOpenOrders / cancelAll', () => {
@@ -300,6 +345,41 @@ describe('createBinanceAdapter — fetchOpenOrders / cancelAll', () => {
     await adapter.cancelAll('ETH/USDT:USDT');
 
     expect(client.cancelAllOrders).toHaveBeenCalledWith('ETH/USDT:USDT');
+  });
+});
+
+describe('createBinanceAdapter — cancelOrder', () => {
+  it('cancels by clientOrderId via params, not the positional id', async () => {
+    const client = makeMockClient();
+    const adapter = createBinanceAdapter(client);
+
+    await adapter.cancelOrder('ETH/USDT:USDT', 'deal-1-tp');
+
+    expect(client.cancelOrder).toHaveBeenCalledWith('', 'ETH/USDT:USDT', {
+      origClientOrderId: 'deal-1-tp',
+    });
+  });
+
+  it('maps ccxt OrderNotFound to the adapter-level OrderNotFoundError (Slice 9: reprice race tolerance)', async () => {
+    const client = makeMockClient({
+      cancelOrder: vi.fn().mockRejectedValue(new OrderNotFound('binanceusdm order does not exist')),
+    });
+    const adapter = createBinanceAdapter(client);
+
+    await expect(adapter.cancelOrder('ETH/USDT:USDT', 'deal-1-tp')).rejects.toThrow(
+      OrderNotFoundError,
+    );
+  });
+
+  it('propagates any other cancelOrder error unchanged', async () => {
+    const client = makeMockClient({
+      cancelOrder: vi.fn().mockRejectedValue(new Error('network error')),
+    });
+    const adapter = createBinanceAdapter(client);
+
+    await expect(adapter.cancelOrder('ETH/USDT:USDT', 'deal-1-tp')).rejects.toThrow(
+      /network error/,
+    );
   });
 });
 

@@ -1,3 +1,4 @@
+import { OrderNotFound } from 'ccxt';
 import type {
   Market,
   Order,
@@ -7,6 +8,7 @@ import type {
 } from 'ccxt';
 import { TIMEFRAME_DURATION_MS } from '../candles/types.js';
 import type { Candle, Timeframe } from '../candles/types.js';
+import { OrderNotFoundError } from './types.js';
 import type {
   CreateOrderParams,
   ExchangeAdapter,
@@ -45,6 +47,7 @@ export interface CcxtLike {
     params?: Record<string, unknown>,
   ) => Promise<Order>;
   fetchOpenOrders: (symbol?: string) => Promise<Order[]>;
+  cancelOrder: (id: string, symbol?: string, params?: Record<string, unknown>) => Promise<Order>;
   cancelAllOrders: (symbol?: string) => Promise<Order[]>;
   fetchFundingRate: (symbol: string) => Promise<CcxtFundingRate>;
 }
@@ -78,6 +81,19 @@ function isNoChangeNeededError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('No need to change');
 }
 
+// Slice 9: a crash between createOrder succeeding on the exchange and the
+// tick's DB write committing means a retry (recoverDeal re-running the same
+// tick) submits the SAME deterministic clientOrderId again. Binance rejects
+// that as code -4116 "ClientOrderId is duplicated." rather than silently
+// returning the existing order — but a duplicate of an order we ourselves
+// already placed with this exact id IS the desired end state, not a
+// failure. Verified against Binance testnet (Slice 9) — an earlier guess of
+// -4015 turned out to be wrong; matched on the numeric code (stable
+// identifier), not the message text.
+function isDuplicateClientOrderIdError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('"code":-4116');
+}
+
 export function createBinanceAdapter(client: CcxtLike): ExchangeAdapter {
   return {
     async setupSymbol(symbol, leverage, marginMode) {
@@ -95,6 +111,12 @@ export function createBinanceAdapter(client: CcxtLike): ExchangeAdapter {
       await client.setLeverage(leverage, symbol);
     },
 
+    // ccxt exposes precision two ways depending on exchange.precisionMode:
+    // TICK_SIZE (market.precision.price/amount ARE the tick/step values,
+    // e.g. 0.01) or DECIMAL_PLACES (a digit count, e.g. 2, needing 10**-n).
+    // binanceusdm reports TICK_SIZE, so reading precision.price/amount
+    // directly as tickSize/stepSize below is correct for this exchange
+    // specifically — not a generic ccxt assumption.
     async getMarketInfo(symbol): Promise<MarketInfo> {
       await client.loadMarkets();
       const market = client.market(symbol);
@@ -128,17 +150,27 @@ export function createBinanceAdapter(client: CcxtLike): ExchangeAdapter {
     },
 
     async createOrder(params: CreateOrderParams): Promise<PlacedOrder> {
-      const order = await client.createOrder(
-        params.symbol,
-        params.type,
-        params.side,
-        params.amount,
-        params.price,
-        {
-          clientOrderId: params.clientOrderId,
-          ...(params.reduceOnly ? { reduceOnly: true } : {}),
-        },
-      );
+      let order: Order;
+      try {
+        order = await client.createOrder(
+          params.symbol,
+          params.type,
+          params.side,
+          params.amount,
+          params.price,
+          {
+            clientOrderId: params.clientOrderId,
+            ...(params.reduceOnly ? { reduceOnly: true } : {}),
+          },
+        );
+      } catch (error) {
+        if (!isDuplicateClientOrderIdError(error)) throw error;
+        // Idempotent retry: an order with this exact clientOrderId already
+        // rests on the exchange (from a pre-crash attempt) — that already IS
+        // the desired state. Callers here only ever key off clientOrderId,
+        // never this return value's id/status, so a placeholder is enough.
+        return { id: '', clientOrderId: params.clientOrderId, status: 'open' };
+      }
       return {
         id: order.id ?? '',
         clientOrderId: order.clientOrderId ?? params.clientOrderId,
@@ -158,6 +190,24 @@ export function createBinanceAdapter(client: CcxtLike): ExchangeAdapter {
         status: order.status ?? 'unknown',
         reduceOnly: order.reduceOnly ?? false,
       }));
+    },
+
+    // ccxt cancels by exchange id positionally; Binance also supports
+    // cancelling by clientOrderId via params.origClientOrderId, which is
+    // what we have persisted (never the exchange's own id) — mirrors how
+    // createOrder threads clientOrderId through params, not a positional
+    // arg. Verified against Binance testnet (Slice 9).
+    async cancelOrder(symbol, clientOrderId) {
+      try {
+        await client.cancelOrder('', symbol, { origClientOrderId: clientOrderId });
+      } catch (error) {
+        if (error instanceof OrderNotFound) {
+          throw new OrderNotFoundError(
+            `binanceAdapter: order ${clientOrderId} not found (already filled/cancelled)`,
+          );
+        }
+        throw error;
+      }
     },
 
     async cancelAll(symbol) {

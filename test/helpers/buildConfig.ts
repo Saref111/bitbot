@@ -9,6 +9,8 @@ export function buildConfig(
     take_profit_pct?: number;
     stop_loss?: number | null;
     entry_filters?: EntryFilter[];
+    include_existing_position?: boolean;
+    halt_after_loss?: boolean;
   } = {},
 ): Config {
   return {
@@ -32,11 +34,11 @@ export function buildConfig(
       runaway_cancel_pct: 0.5,
       ...overrides.grid,
     },
-    include_existing_position: false,
+    include_existing_position: overrides.include_existing_position ?? false,
     take_profit_pct: overrides.take_profit_pct ?? 0.9,
     profit_currency: 'USDT',
     trailing_take: null,
     stop_loss: overrides.stop_loss ?? null,
-    halt_after_loss: false,
+    halt_after_loss: overrides.halt_after_loss ?? false,
   };
 }

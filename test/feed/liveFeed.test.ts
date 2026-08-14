@@ -35,6 +35,7 @@ function makeAdapter(fetchOHLCV: ExchangeAdapter['fetchOHLCV']): ExchangeAdapter
     fetchPosition: vi.fn(),
     createOrder: vi.fn(),
     fetchOpenOrders: vi.fn().mockResolvedValue([]),
+    cancelOrder: vi.fn().mockResolvedValue(undefined),
     cancelAll: vi.fn().mockResolvedValue(undefined),
     fetchFundingRate: vi.fn(),
   };

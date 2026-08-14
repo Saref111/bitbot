@@ -48,6 +48,7 @@ describe('gridOrderRepository', () => {
       filledAt: null,
       cancelledAt: null,
       fillPrice: null,
+      filledSize: 0,
     });
   });
 
@@ -103,6 +104,23 @@ describe('gridOrderRepository', () => {
     const order = getGridOrdersByDeal(db, 'deal-1')[0];
     expect(order?.status).toBe('cancelled');
     expect(order?.cancelledAt).toBe(2050);
+  });
+
+  it('tracks partial-fill progress via filledSize while still placed (MVP: real limit orders can fill incrementally)', () => {
+    const db = openDatabase();
+    seedDeal(db);
+    insertGridOrders(
+      db,
+      'deal-1',
+      [{ rungIndex: 1, price: 1897.74, size: 0.018, clientOrderId: 'deal-1-1' }],
+      2000,
+    );
+    updateGridOrderStatus(db, 'deal-1-1', { status: 'placed', placedAt: 2100 });
+
+    updateGridOrderStatus(db, 'deal-1-1', { status: 'placed', filledSize: 0.007 });
+    const order = getGridOrdersByDeal(db, 'deal-1')[0];
+    expect(order?.status).toBe('placed');
+    expect(order?.filledSize).toBeCloseTo(0.007, 9);
   });
 
   it('scopes results to the given deal', () => {

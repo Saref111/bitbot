@@ -1,5 +1,12 @@
 import type { Candle, Timeframe } from '../candles/types.js';
 
+/**
+ * Thrown by ExchangeAdapter.cancelOrder when the order is already gone
+ * (filled or otherwise resolved) rather than still cancellable — Slice 9's
+ * TP/SL reprice treats this as "it just filled," not a real failure.
+ */
+export class OrderNotFoundError extends Error {}
+
 export interface MarketInfo {
   symbol: string;
   tickSize: number;
@@ -65,6 +72,12 @@ export interface ExchangeAdapter {
   fetchPosition: (symbol: string) => Promise<Position>;
   createOrder: (params: CreateOrderParams) => Promise<PlacedOrder>;
   fetchOpenOrders: (symbol: string) => Promise<OpenOrder[]>;
+  /**
+   * Cancels ONE specific resting order by clientOrderId, unlike cancelAll —
+   * needed for TP/SL reprice (Slice 9), which must not disturb the other
+   * still-live grid rungs on the same symbol.
+   */
+  cancelOrder: (symbol: string, clientOrderId: string) => Promise<void>;
   cancelAll: (symbol: string) => Promise<void>;
   fetchFundingRate: (symbol: string) => Promise<FundingRateInfo>;
 }
