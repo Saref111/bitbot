@@ -16,6 +16,8 @@ export interface DealPatch {
   depositUsdt?: number;
   closeReason?: DealCloseReason;
   closedAt?: number;
+  /** undefined = don't touch; null = explicitly clear (e.g. computeNet failed); number = the computed NET. */
+  netProfit?: number | null;
 }
 
 const PATCH_COLUMNS: Record<keyof DealPatch, string> = {
@@ -25,6 +27,7 @@ const PATCH_COLUMNS: Record<keyof DealPatch, string> = {
   depositUsdt: 'deposit_usdt',
   closeReason: 'close_reason',
   closedAt: 'closed_at',
+  netProfit: 'net_profit',
 };
 
 function mapRow(row: Record<string, unknown>): DealRow {
@@ -38,13 +41,14 @@ function mapRow(row: Record<string, unknown>): DealRow {
     closeReason: row.close_reason as DealCloseReason | null,
     openedAt: row.opened_at as number,
     closedAt: row.closed_at as number | null,
+    netProfit: row.net_profit as number | null,
   };
 }
 
 export function insertDeal(db: DatabaseSync, deal: NewDeal): void {
   db.prepare(
-    `INSERT INTO deal (id, status, direction, p_entry, filled_rungs_count, deposit_usdt, close_reason, opened_at, closed_at)
-     VALUES (@id, @status, @direction, NULL, 0, @depositUsdt, NULL, @openedAt, NULL)`,
+    `INSERT INTO deal (id, status, direction, p_entry, filled_rungs_count, deposit_usdt, close_reason, opened_at, closed_at, net_profit)
+     VALUES (@id, @status, @direction, NULL, 0, @depositUsdt, NULL, @openedAt, NULL, NULL)`,
   ).run({
     id: deal.id,
     status: deal.status,
@@ -69,5 +73,13 @@ export function updateDeal(db: DatabaseSync, dealId: string, patch: DealPatch): 
 
 export function getDeal(db: DatabaseSync, dealId: string): DealRow | null {
   const row = db.prepare('SELECT * FROM deal WHERE id = @dealId').get({ dealId });
+  return row ? mapRow(row) : null;
+}
+
+/** MVP §7 (reinvest chain): the most recently closed deal, any final status — resolveDeposit.ts decides which statuses it trusts. */
+export function getMostRecentClosedDeal(db: DatabaseSync): DealRow | null {
+  const row = db
+    .prepare('SELECT * FROM deal WHERE closed_at IS NOT NULL ORDER BY closed_at DESC LIMIT 1')
+    .get();
   return row ? mapRow(row) : null;
 }

@@ -227,3 +227,98 @@ describe('runDeal — external cancel of a resting grid rung leads to HALTED (MV
     expect(deal?.status).toBe('HALTED');
   }, 60_000);
 });
+
+describe('createBinanceAdapter.fetchTrades/fetchFundingHistory — real shape on testnet (Slice 10: NET)', () => {
+  let adapter: ExchangeAdapter;
+  const clientOrderId = `bitbot-test-net-${String(Date.now())}`;
+
+  beforeAll(() => {
+    const credentials = loadExchangeCredentials();
+    if (!credentials.testnet) {
+      throw new Error(
+        'Refusing to run integration tests against a non-testnet account (BINANCE_TESTNET must be "true")',
+      );
+    }
+    adapter = createBinanceAdapter(createBinanceCcxtClient(credentials));
+  });
+
+  afterAll(async () => {
+    await adapter.cancelAll(SYMBOL);
+    const position = await adapter.fetchPosition(SYMBOL);
+    if (position.contracts > 0) {
+      await adapter.createOrder({
+        symbol: SYMBOL,
+        side: position.side === 'short' ? 'buy' : 'sell',
+        type: 'market',
+        amount: position.contracts,
+        clientOrderId: `${clientOrderId}-cleanup`,
+        reduceOnly: true,
+      });
+    }
+  });
+
+  it('reports fee.currency and takerOrMaker computeNet.ts actually relies on, for a real forced fill', async () => {
+    const since = Date.now();
+    const candles = await adapter.fetchOHLCV(SYMBOL, '1m', undefined, 1);
+    const lastClose = candles.at(-1)?.close;
+    if (lastClose === undefined) throw new Error('no candle to derive a price from');
+
+    const market = await adapter.getMarketInfo(SYMBOL);
+    // 2% above market: marketable, forces an immediate fill (same trick as
+    // the external-cancel test above).
+    const price = Math.round(lastClose * 1.02 * 100) / 100;
+    const amount =
+      Math.ceil((market.minNotional * 1.5) / price / market.stepSize) * market.stepSize;
+
+    await adapter.createOrder({
+      symbol: SYMBOL,
+      side: 'buy',
+      type: 'limit',
+      amount,
+      price,
+      clientOrderId,
+    });
+
+    const filledPosition = await pollUntil(
+      async () => {
+        const position = await adapter.fetchPosition(SYMBOL);
+        return position.contracts > 0 ? position : null;
+      },
+      { intervalMs: 1000, timeoutMs: 15_000 },
+    );
+
+    // Close it right back out via a market reduceOnly sell — keeps this
+    // test's footprint on the account minimal and gives a SECOND real trade
+    // (a taker fill) to inspect alongside the entry.
+    await adapter.createOrder({
+      symbol: SYMBOL,
+      side: 'sell',
+      type: 'market',
+      amount: filledPosition.contracts,
+      clientOrderId: `${clientOrderId}-close`,
+      reduceOnly: true,
+    });
+
+    const trades = await pollUntil(
+      async () => {
+        const observed = await adapter.fetchTrades(SYMBOL, since);
+        return observed.length >= 2 ? observed : null;
+      },
+      { intervalMs: 1000, timeoutMs: 15_000 },
+    );
+
+    for (const trade of trades) {
+      // computeNet.ts's currency guard assumes fees land in the quote
+      // currency on a normal (non-BNB-discount) account — confirm that
+      // holds for real here, not just in the mocked unit tests.
+      expect(trade.feeCurrency).toBe('USDT');
+      expect(['maker', 'taker']).toContain(trade.takerOrMaker);
+    }
+
+    // No funding will have accrued in the few seconds this test runs —
+    // this only proves the call succeeds and returns an array shape
+    // computeNet.ts can sum, not a specific value.
+    const funding = await adapter.fetchFundingHistory(SYMBOL, since);
+    expect(Array.isArray(funding)).toBe(true);
+  }, 60_000);
+});

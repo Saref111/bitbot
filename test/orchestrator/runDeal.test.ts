@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { openDatabase } from '../../src/storage/db.js';
-import { getDeal } from '../../src/storage/dealRepository.js';
+import { getDeal, insertDeal, updateDeal } from '../../src/storage/dealRepository.js';
 import { getGridOrdersByDeal } from '../../src/storage/gridOrderRepository.js';
 import { getExitOrdersByDeal, insertExitOrder } from '../../src/storage/exitOrderRepository.js';
 import { runDeal } from '../../src/orchestrator/runDeal.js';
@@ -60,6 +60,8 @@ function makeMockAdapter(overrides: Partial<ExchangeAdapter> = {}): ExchangeAdap
     cancelOrder: vi.fn().mockResolvedValue(undefined),
     cancelAll: vi.fn().mockResolvedValue(undefined),
     fetchFundingRate: vi.fn(),
+    fetchTrades: vi.fn().mockResolvedValue([]),
+    fetchFundingHistory: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
@@ -544,5 +546,166 @@ describe('runDeal — tick mutations are transactional', () => {
     expect(rung1?.status).toBe('placed');
     const deal = getDeal(db, 'deal-1');
     expect(deal?.status).toBe('GRID_PLACED');
+  });
+});
+
+describe('runDeal — NET and reinvest (MVP §7, §13.4)', () => {
+  function closingOrdersSequence() {
+    return vi
+      .fn()
+      .mockResolvedValueOnce([
+        order({ clientOrderId: 'deal-1-1' }),
+        order({ clientOrderId: 'deal-1-2', price: 1900, amount: 0.157 }),
+      ])
+      .mockResolvedValueOnce([order({ clientOrderId: 'deal-1-2', price: 1900, amount: 0.157 })])
+      .mockResolvedValueOnce([
+        order({ clientOrderId: 'deal-1-2', price: 1900, amount: 0.157 }),
+        order({
+          clientOrderId: 'deal-1-tp-0',
+          side: 'sell',
+          price: 2015.96,
+          amount: 0.15,
+          reduceOnly: true,
+        }),
+      ])
+      .mockResolvedValue([order({ clientOrderId: 'deal-1-2', price: 1900, amount: 0.157 })]);
+  }
+
+  function closingPositionSequence() {
+    return vi
+      .fn()
+      .mockResolvedValueOnce(pos({ contracts: 0 }))
+      .mockResolvedValueOnce(pos({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }))
+      .mockResolvedValueOnce(pos({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }))
+      .mockResolvedValue(pos({ contracts: 0, entryPrice: null }));
+  }
+
+  it('writes netProfit computed from real trades/funding at SETTLING', async () => {
+    const db = openDatabase();
+    const config = twoRungConfig();
+
+    const fetchTrades = vi.fn().mockResolvedValue([
+      {
+        timestamp: 1100,
+        side: 'buy',
+        price: 1996,
+        amount: 0.15,
+        cost: 299.4,
+        feeCost: 0.12,
+        feeCurrency: 'USDT',
+        takerOrMaker: 'maker',
+      },
+      {
+        timestamp: 1400,
+        side: 'sell',
+        price: 2015.96,
+        amount: 0.15,
+        cost: 302.394,
+        feeCost: 0.121,
+        feeCurrency: 'USDT',
+        takerOrMaker: 'taker',
+      },
+    ]);
+    const fetchFundingHistory = vi.fn().mockResolvedValue([{ timestamp: 1200, amount: -0.05 }]);
+
+    const adapter = makeMockAdapter({
+      fetchOpenOrders: closingOrdersSequence(),
+      fetchPosition: closingPositionSequence(),
+      fetchTrades,
+      fetchFundingHistory,
+    });
+    let t = 1000;
+
+    const result = await runDeal({
+      adapter,
+      db,
+      config,
+      now: () => t++,
+      dealId: 'deal-1',
+      entryPrice: 2000,
+      options: { pollIntervalMs: 1 },
+    });
+
+    expect(result).toEqual({ outcome: 'closed', closeReason: 'tp' });
+    expect(fetchTrades).toHaveBeenCalledWith('ETH/USDT:USDT', 1000); // deal.openedAt, the very first now() call
+    expect(fetchFundingHistory).toHaveBeenCalledWith('ETH/USDT:USDT', 1000);
+
+    // grossProfit = 302.394 - 299.4 = 2.994; fees = 0.12+0.121 = 0.241; funding = -0.05
+    // netProfit = 2.994 - 0.241 - 0.05 = 2.703
+    expect(getDeal(db, 'deal-1')?.netProfit).toBeCloseTo(2.703, 9);
+  });
+
+  it('still reaches SETTLING with netProfit: null when computeNet fails, instead of getting stuck ACTIVE', async () => {
+    const db = openDatabase();
+    const config = twoRungConfig();
+
+    const adapter = makeMockAdapter({
+      fetchOpenOrders: closingOrdersSequence(),
+      fetchPosition: closingPositionSequence(),
+      fetchTrades: vi.fn().mockRejectedValue(new Error('network drop')),
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let t = 1000;
+
+    const result = await runDeal({
+      adapter,
+      db,
+      config,
+      now: () => t++,
+      dealId: 'deal-1',
+      entryPrice: 2000,
+      options: { pollIntervalMs: 1 },
+    });
+
+    expect(result).toEqual({ outcome: 'closed', closeReason: 'tp' });
+    const deal = getDeal(db, 'deal-1');
+    expect(deal?.status).toBe('SETTLING'); // not stuck ACTIVE
+    expect(deal?.netProfit).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('computeNet failed'));
+    warnSpy.mockRestore();
+  });
+
+  it('starts a new deal from the compounded deposit after a profitable prior deal', async () => {
+    const db = openDatabase();
+    const config = twoRungConfig(); // reinvest_pct: 20 (buildConfig default), deposit_usdt: 200
+
+    insertDeal(db, {
+      id: 'deal-0',
+      status: 'ACTIVE',
+      direction: 'long',
+      depositUsdt: 200,
+      openedAt: 500,
+    });
+    updateDeal(db, 'deal-0', {
+      status: 'SETTLING',
+      closeReason: 'tp',
+      closedAt: 900,
+      netProfit: 50, // -> next deposit = 200 + 0.2*50 = 210
+    });
+
+    // insertDeal (with the resolved deposit) runs synchronously before
+    // runDeal's first `await` — reject right there so the background
+    // execution stops almost immediately instead of running the real
+    // polling loop forever in this test.
+    const adapter = makeMockAdapter({
+      getMarketInfo: vi.fn().mockRejectedValue(new Error('stop after insertDeal')),
+    });
+    let t = 1000;
+
+    const runPromise = runDeal({
+      adapter,
+      db,
+      config,
+      now: () => t++,
+      dealId: 'deal-1',
+      entryPrice: 2000,
+      options: { pollIntervalMs: 1 },
+    }).catch(() => undefined);
+
+    // Synchronous prefix (insertDeal) has already run by the time runDeal's
+    // returned promise is assigned — no need to await anything first.
+    expect(getDeal(db, 'deal-1')?.depositUsdt).toBeCloseTo(210, 9);
+
+    await runPromise; // let the rejection settle so it isn't unhandled
   });
 });

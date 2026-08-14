@@ -18,6 +18,8 @@ function makeMockClient(overrides: Partial<CcxtLike> = {}): CcxtLike {
     cancelOrder: vi.fn().mockResolvedValue({}),
     cancelAllOrders: vi.fn().mockResolvedValue([]),
     fetchFundingRate: vi.fn(),
+    fetchMyTrades: vi.fn().mockResolvedValue([]),
+    fetchFundingHistory: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
@@ -394,5 +396,97 @@ describe('createBinanceAdapter — fetchFundingRate', () => {
       fundingRate: 0.0001,
       fundingTimestamp: 123,
     });
+  });
+});
+
+describe('createBinanceAdapter — fetchTrades (Slice 10: NET)', () => {
+  it('maps side/price/amount/cost/fee/takerOrMaker and passes since through', async () => {
+    const fetchMyTrades = vi.fn().mockResolvedValue([
+      {
+        timestamp: 1000,
+        side: 'buy',
+        price: 1996,
+        amount: 0.15,
+        cost: 299.4,
+        fee: { cost: 0.1198, currency: 'USDT' },
+        takerOrMaker: 'maker',
+      },
+      {
+        timestamp: 2000,
+        side: 'sell',
+        price: 2016,
+        amount: 0.15,
+        cost: 302.4,
+        fee: { cost: 0.121, currency: 'USDT' },
+        takerOrMaker: 'taker',
+      },
+    ]);
+    const client = makeMockClient({ fetchMyTrades });
+    const adapter = createBinanceAdapter(client);
+
+    const trades = await adapter.fetchTrades('ETH/USDT:USDT', 1000);
+
+    expect(fetchMyTrades).toHaveBeenCalledWith('ETH/USDT:USDT', 1000);
+    expect(trades).toEqual([
+      {
+        timestamp: 1000,
+        side: 'buy',
+        price: 1996,
+        amount: 0.15,
+        cost: 299.4,
+        feeCost: 0.1198,
+        feeCurrency: 'USDT',
+        takerOrMaker: 'maker',
+      },
+      {
+        timestamp: 2000,
+        side: 'sell',
+        price: 2016,
+        amount: 0.15,
+        cost: 302.4,
+        feeCost: 0.121,
+        feeCurrency: 'USDT',
+        takerOrMaker: 'taker',
+      },
+    ]);
+  });
+
+  it('maps an unrecognized takerOrMaker value to "unknown" rather than guessing', async () => {
+    const client = makeMockClient({
+      fetchMyTrades: vi.fn().mockResolvedValue([
+        {
+          timestamp: 1000,
+          side: 'buy',
+          price: 1996,
+          amount: 0.15,
+          cost: 299.4,
+          fee: { cost: 0.1, currency: 'USDT' },
+          takerOrMaker: undefined,
+        },
+      ]),
+    });
+    const adapter = createBinanceAdapter(client);
+
+    const [trade] = await adapter.fetchTrades('ETH/USDT:USDT', 1000);
+    expect(trade?.takerOrMaker).toBe('unknown');
+  });
+});
+
+describe('createBinanceAdapter — fetchFundingHistory (Slice 10: NET)', () => {
+  it('maps timestamp/amount and passes since + a generous explicit limit through', async () => {
+    const fetchFundingHistory = vi.fn().mockResolvedValue([
+      { timestamp: 1500, amount: -0.05 }, // long paying funding — the common case
+      { timestamp: 30000, amount: 0.02 },
+    ]);
+    const client = makeMockClient({ fetchFundingHistory });
+    const adapter = createBinanceAdapter(client);
+
+    const history = await adapter.fetchFundingHistory('ETH/USDT:USDT', 1000);
+
+    expect(fetchFundingHistory).toHaveBeenCalledWith('ETH/USDT:USDT', 1000, 1000);
+    expect(history).toEqual([
+      { timestamp: 1500, amount: -0.05 },
+      { timestamp: 30000, amount: 0.02 },
+    ]);
   });
 });

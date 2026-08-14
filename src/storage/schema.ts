@@ -13,7 +13,12 @@ CREATE TABLE IF NOT EXISTS deal (
   deposit_usdt REAL NOT NULL,
   close_reason TEXT,
   opened_at INTEGER NOT NULL,
-  closed_at INTEGER
+  closed_at INTEGER,
+  -- Slice 10: gross profit - fees (both legs) + funding, computed once at
+  -- SETTLING/HALTED. NULL until then, and stays NULL if it was never
+  -- computed (runaway, external-cancel HALT, or computeNet itself failing)
+  -- — resolveDeposit.ts treats NULL the same as "no growth this cycle".
+  net_profit REAL
 );
 
 CREATE TABLE IF NOT EXISTS grid_order (
