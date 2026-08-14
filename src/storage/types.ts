@@ -29,6 +29,7 @@ export interface GridOrderRow {
   filledAt: number | null;
   cancelledAt: number | null;
   fillPrice: number | null;
+  filledSize: number;
 }
 
 export interface ExitOrderRow {
@@ -37,10 +38,12 @@ export interface ExitOrderRow {
   type: ExitOrderType;
   clientOrderId: string;
   price: number;
+  amount: number;
   status: ExitOrderStatus;
   createdAt: number;
   filledAt: number | null;
   cancelledAt: number | null;
+  filledSize: number;
 }
 
 export interface EventLogRow {

@@ -28,6 +28,7 @@ describe('exitOrderRepository', () => {
       type: 'tp',
       clientOrderId: 'deal-1-tp',
       price: 1917.6,
+      amount: 0.03,
       createdAt: 2000,
     });
 
@@ -39,10 +40,12 @@ describe('exitOrderRepository', () => {
         type: 'tp',
         clientOrderId: 'deal-1-tp',
         price: 1917.6,
+        amount: 0.03,
         status: 'placed',
         createdAt: 2000,
         filledAt: null,
         cancelledAt: null,
+        filledSize: 0,
       },
     ]);
   });
@@ -55,6 +58,7 @@ describe('exitOrderRepository', () => {
       type: 'tp',
       clientOrderId: 'deal-1-tp',
       price: 1917.6,
+      amount: 0.03,
       createdAt: 2000,
     });
     insertExitOrder(db, {
@@ -62,6 +66,7 @@ describe('exitOrderRepository', () => {
       type: 'sl',
       clientOrderId: 'deal-1-sl',
       price: 1800,
+      amount: 0.03,
       createdAt: 2000,
     });
 
@@ -77,6 +82,7 @@ describe('exitOrderRepository', () => {
       type: 'tp',
       clientOrderId: 'deal-1-tp',
       price: 1917.6,
+      amount: 0.03,
       createdAt: 2000,
     });
 
@@ -95,6 +101,7 @@ describe('exitOrderRepository', () => {
       type: 'tp',
       clientOrderId: 'deal-1-tp',
       price: 1917.6,
+      amount: 0.03,
       createdAt: 2000,
     });
 
@@ -103,5 +110,24 @@ describe('exitOrderRepository', () => {
     const order = getExitOrdersByDeal(db, 'deal-1')[0];
     expect(order?.status).toBe('cancelled');
     expect(order?.cancelledAt).toBe(2500);
+  });
+
+  it('tracks partial-fill progress via filledSize without changing status', () => {
+    const db = openDatabase();
+    seedDeal(db);
+    insertExitOrder(db, {
+      dealId: 'deal-1',
+      type: 'tp',
+      clientOrderId: 'deal-1-tp',
+      price: 1917.6,
+      amount: 0.03,
+      createdAt: 2000,
+    });
+
+    updateExitOrderStatus(db, 'deal-1-tp', { status: 'placed', filledSize: 0.01 });
+
+    const order = getExitOrdersByDeal(db, 'deal-1')[0];
+    expect(order?.status).toBe('placed');
+    expect(order?.filledSize).toBeCloseTo(0.01, 9);
   });
 });

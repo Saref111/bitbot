@@ -14,6 +14,7 @@ export interface GridOrderPatch {
   filledAt?: number;
   cancelledAt?: number;
   fillPrice?: number;
+  filledSize?: number;
 }
 
 function mapRow(row: Record<string, unknown>): GridOrderRow {
@@ -30,6 +31,7 @@ function mapRow(row: Record<string, unknown>): GridOrderRow {
     filledAt: row.filled_at as number | null,
     cancelledAt: row.cancelled_at as number | null,
     fillPrice: row.fill_price as number | null,
+    filledSize: row.filled_size as number,
   };
 }
 
@@ -67,7 +69,8 @@ export function updateGridOrderStatus(
          placed_at = COALESCE(@placedAt, placed_at),
          filled_at = COALESCE(@filledAt, filled_at),
          cancelled_at = COALESCE(@cancelledAt, cancelled_at),
-         fill_price = COALESCE(@fillPrice, fill_price)
+         fill_price = COALESCE(@fillPrice, fill_price),
+         filled_size = COALESCE(@filledSize, filled_size)
      WHERE client_order_id = @clientOrderId`,
   ).run({
     clientOrderId,
@@ -76,6 +79,7 @@ export function updateGridOrderStatus(
     filledAt: patch.filledAt ?? null,
     cancelledAt: patch.cancelledAt ?? null,
     fillPrice: patch.fillPrice ?? null,
+    filledSize: patch.filledSize ?? null,
   });
 }
 

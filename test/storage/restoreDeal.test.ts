@@ -38,6 +38,7 @@ describe('restoreDeal — composite load', () => {
       type: 'tp',
       clientOrderId: 'deal-1-tp',
       price: 1917.6,
+      amount: 0.018,
       createdAt: 1100,
     });
     insertConfigSnapshot(db, 'deal-1', config, 1000);
