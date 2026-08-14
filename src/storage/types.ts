@@ -14,6 +14,7 @@ export interface DealRow {
   closeReason: DealCloseReason | null;
   openedAt: number;
   closedAt: number | null;
+  netProfit: number | null;
 }
 
 export interface GridOrderRow {

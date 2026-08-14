@@ -5,6 +5,8 @@ import type {
   OHLCV,
   Position as CcxtPosition,
   FundingRate as CcxtFundingRate,
+  Trade as CcxtTrade,
+  FundingHistory as CcxtFundingHistory,
 } from 'ccxt';
 import { TIMEFRAME_DURATION_MS } from '../candles/types.js';
 import type { Candle, Timeframe } from '../candles/types.js';
@@ -12,11 +14,13 @@ import { OrderNotFoundError } from './types.js';
 import type {
   CreateOrderParams,
   ExchangeAdapter,
+  FundingPayment,
   FundingRateInfo,
   MarketInfo,
   OpenOrder,
   PlacedOrder,
   Position,
+  TradeInfo,
 } from './types.js';
 
 /**
@@ -50,6 +54,12 @@ export interface CcxtLike {
   cancelOrder: (id: string, symbol?: string, params?: Record<string, unknown>) => Promise<Order>;
   cancelAllOrders: (symbol?: string) => Promise<Order[]>;
   fetchFundingRate: (symbol: string) => Promise<CcxtFundingRate>;
+  fetchMyTrades: (symbol?: string, since?: number, limit?: number) => Promise<CcxtTrade[]>;
+  fetchFundingHistory: (
+    symbol?: string,
+    since?: number,
+    limit?: number,
+  ) => Promise<CcxtFundingHistory[]>;
 }
 
 function toCandle(row: OHLCV, timeframe: Timeframe): Candle {
@@ -220,6 +230,35 @@ export function createBinanceAdapter(client: CcxtLike): ExchangeAdapter {
         fundingRate: rate.fundingRate ?? 0,
         fundingTimestamp: rate.fundingTimestamp ?? null,
       };
+    },
+
+    async fetchTrades(symbol, since): Promise<TradeInfo[]> {
+      const trades = await client.fetchMyTrades(symbol, since);
+      return trades.map((trade) => ({
+        timestamp: trade.timestamp ?? 0,
+        side: trade.side === 'sell' ? 'sell' : 'buy',
+        price: trade.price ?? 0,
+        amount: trade.amount ?? 0,
+        cost: trade.cost ?? 0,
+        feeCost: trade.fee?.cost ?? 0,
+        feeCurrency: trade.fee?.currency ?? '',
+        takerOrMaker:
+          trade.takerOrMaker === 'maker' || trade.takerOrMaker === 'taker'
+            ? trade.takerOrMaker
+            : 'unknown',
+      }));
+    },
+
+    // No client-side upper bound and no pagination loop — see computeNet.ts
+    // for why the upper bound is intentionally absent. A generous explicit
+    // limit (funding accrues every 8h; ~1000 entries covers ~333 days) is
+    // simpler than real pagination for a personal-scale MVP deal.
+    async fetchFundingHistory(symbol, since): Promise<FundingPayment[]> {
+      const history = await client.fetchFundingHistory(symbol, since, 1000);
+      return history.map((entry) => ({
+        timestamp: entry.timestamp ?? 0,
+        amount: entry.amount ?? 0,
+      }));
     },
   };
 }

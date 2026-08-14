@@ -16,6 +16,8 @@ import { reconcileTick } from './reconcile.js';
 import { shouldCancelForRunaway } from './runaway.js';
 import { deliverNextRungs } from './deliverRungs.js';
 import { reconcileExitTargets } from './exitTargets.js';
+import { computeNet } from './computeNet.js';
+import { resolveDepositUsdt } from './resolveDeposit.js';
 import { sleep } from '../util/time.js';
 import type { GridOrderRow, ExitOrderRow, DealCloseReason } from '../storage/types.js';
 import type { ReconcileEvent } from './reconcileTypes.js';
@@ -410,6 +412,24 @@ async function activeTick(ctx: TickContext): Promise<'continue' | RunDealResult>
     const haltAfterLoss = closeReason === 'sl' && config.halt_after_loss;
     const closedAt = now();
 
+    // MVP §7, §13.4: computed here (network calls, outside the sync
+    // transaction below), not bounded by closedAt on the upper end — see
+    // computeNet.ts. If it fails (e.g. network drop right after cancelAll),
+    // the position is ALREADY closed on the exchange either way; blocking
+    // the SETTLING write on this would leave the deal stuck in ACTIVE with
+    // a closed position and no way forward. Degrade instead: close with
+    // netProfit: null, which resolveDeposit.ts already treats as "no
+    // reinvest growth this cycle" — same safe path as a loss.
+    let netProfit: number | null;
+    try {
+      netProfit = (await computeNet(adapter, config.symbol, deal.openedAt)).netProfit;
+    } catch (error) {
+      console.warn(
+        `runDeal: computeNet failed for deal ${dealId}, closing with netProfit: null — ${String(error)}`,
+      );
+      netProfit = null;
+    }
+
     runInTransaction(db, () => {
       for (const partial of partials) {
         const patch = { status: 'placed' as const, filledSize: partial.filledSize };
@@ -454,6 +474,7 @@ async function activeTick(ctx: TickContext): Promise<'continue' | RunDealResult>
         filledRungsCount: newFilledRungsCount,
         closeReason,
         closedAt,
+        netProfit,
       });
       if (haltAfterLoss) {
         appendEvent(db, {
@@ -576,7 +597,13 @@ export async function runDealLoop(
  * reacts to whatever fills/cancels/reprices happen next, in any order.
  */
 export async function runDeal(params: RunDealParams): Promise<RunDealResult> {
-  const { adapter, db, config, now, dealId, entryPrice, options } = params;
+  const { adapter, db, now, dealId, entryPrice, options } = params;
+  // MVP §7: this deal's budget is the compounded deposit from the reinvest
+  // chain (resolveDeposit.ts), not always the static config value — shadows
+  // `config` for the rest of this function so every downstream read
+  // (projectGrid, the config_snapshot, runDealLoop) sees the resolved
+  // number consistently, not just the initial `deal` row.
+  const config = { ...params.config, deposit_usdt: resolveDepositUsdt(db, params.config) };
 
   insertDeal(db, {
     id: dealId,

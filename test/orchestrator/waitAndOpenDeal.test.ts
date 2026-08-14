@@ -146,6 +146,8 @@ describe('waitAndOpenDeal — the bot enters exactly when filters align (MVP §5
       cancelOrder: vi.fn().mockResolvedValue(undefined),
       cancelAll: vi.fn().mockResolvedValue(undefined),
       fetchFundingRate: vi.fn(),
+      fetchTrades: vi.fn().mockResolvedValue([]),
+      fetchFundingHistory: vi.fn().mockResolvedValue([]),
     };
 
     const db = openDatabase();

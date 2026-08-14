@@ -56,6 +56,24 @@ export interface FundingRateInfo {
   fundingTimestamp: number | null;
 }
 
+export interface TradeInfo {
+  timestamp: number;
+  side: 'buy' | 'sell';
+  price: number;
+  amount: number;
+  cost: number;
+  feeCost: number;
+  /** Currency the fee was charged in — Slice 10's computeNet checks this against the symbol's quote currency before summing. */
+  feeCurrency: string;
+  takerOrMaker: 'taker' | 'maker' | 'unknown';
+}
+
+export interface FundingPayment {
+  timestamp: number;
+  /** Binance income-history convention: negative when we paid, positive when we received. */
+  amount: number;
+}
+
 export interface ExchangeAdapter {
   setupSymbol: (
     symbol: string,
@@ -80,4 +98,8 @@ export interface ExchangeAdapter {
   cancelOrder: (symbol: string, clientOrderId: string) => Promise<void>;
   cancelAll: (symbol: string) => Promise<void>;
   fetchFundingRate: (symbol: string) => Promise<FundingRateInfo>;
+  /** MVP §13.4 (NET): every trade (both legs) since `since`, no upper bound — see computeNet.ts for why. */
+  fetchTrades: (symbol: string, since: number) => Promise<TradeInfo[]>;
+  /** MVP §13.4 (NET): funding payments since `since`, no upper bound. */
+  fetchFundingHistory: (symbol: string, since: number) => Promise<FundingPayment[]>;
 }

@@ -22,6 +22,8 @@ function makeMockAdapter(overrides: Partial<ExchangeAdapter> = {}): ExchangeAdap
     cancelOrder: vi.fn().mockResolvedValue(undefined),
     cancelAll: vi.fn().mockResolvedValue(undefined),
     fetchFundingRate: vi.fn(),
+    fetchTrades: vi.fn().mockResolvedValue([]),
+    fetchFundingHistory: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
