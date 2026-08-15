@@ -1,4 +1,6 @@
+import { createNoopLogger } from '../logging/logger.js';
 import type { ExchangeAdapter } from '../exchange/types.js';
+import type { Logger } from '../logging/logger.js';
 
 export interface NetBreakdown {
   grossProfit: number;
@@ -39,6 +41,7 @@ export async function computeNet(
   adapter: ExchangeAdapter,
   symbol: string,
   since: number,
+  logger: Logger = createNoopLogger(),
 ): Promise<NetBreakdown> {
   const quoteCurrency = parseQuoteCurrency(symbol);
 
@@ -48,8 +51,9 @@ export async function computeNet(
   for (const trade of trades) {
     grossProfit += trade.side === 'sell' ? trade.cost : -trade.cost;
     if (trade.feeCurrency !== quoteCurrency) {
-      console.warn(
-        `computeNet: trade fee in non-quote currency '${trade.feeCurrency}' (expected '${quoteCurrency}') — excluded from NET, conversion not implemented`,
+      logger.warn(
+        { symbol, feeCurrency: trade.feeCurrency, expected: quoteCurrency },
+        'trade fee in non-quote currency — excluded from NET, conversion not implemented',
       );
       continue;
     }
