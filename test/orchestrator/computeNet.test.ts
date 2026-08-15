@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { computeNet } from '../../src/orchestrator/computeNet.js';
 import type { ExchangeAdapter, FundingPayment, TradeInfo } from '../../src/exchange/types.js';
+import type { Logger } from '../../src/logging/logger.js';
 
 function trade(overrides: Partial<TradeInfo> = {}): TradeInfo {
   return {
@@ -74,7 +75,6 @@ describe('computeNet — MVP §7, §13.4', () => {
   });
 
   it('excludes a fee paid in a non-quote currency, with a WARN, rather than silently summing or ignoring it', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const adapter = makeAdapter(
       [
         trade({ side: 'buy', cost: 300, feeCost: 0.12, feeCurrency: 'USDT' }),
@@ -82,12 +82,15 @@ describe('computeNet — MVP §7, §13.4', () => {
       ],
       [],
     );
+    const logger = { warn: vi.fn() } as unknown as Logger;
 
-    const result = await computeNet(adapter, 'ETH/USDT:USDT', 1000);
+    const result = await computeNet(adapter, 'ETH/USDT:USDT', 1000, logger);
 
     expect(result.totalFees).toBeCloseTo(0.12, 9); // only the USDT-denominated fee counted
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('BNB'));
-    warnSpy.mockRestore();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ feeCurrency: 'BNB' }),
+      expect.any(String),
+    );
   });
 
   it('passes since through to fetchTrades/fetchFundingHistory and applies no upper bound', async () => {

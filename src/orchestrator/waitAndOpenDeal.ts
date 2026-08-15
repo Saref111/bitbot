@@ -45,5 +45,7 @@ export async function waitAndOpenDeal(params: WaitAndOpenDealParams): Promise<Ru
         ? { haltConfirmationTicks: params.haltConfirmationTicks }
         : {}),
     },
+    ...(params.logger !== undefined ? { logger: params.logger } : {}),
+    ...(params.notifier !== undefined ? { notifier: params.notifier } : {}),
   });
 }

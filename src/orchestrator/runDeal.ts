@@ -18,11 +18,16 @@ import { deliverNextRungs } from './deliverRungs.js';
 import { reconcileExitTargets } from './exitTargets.js';
 import { computeNet } from './computeNet.js';
 import { resolveDepositUsdt } from './resolveDeposit.js';
+import { createNoopLogger } from '../logging/logger.js';
+import { createNoopNotifier } from '../notify/noopNotifier.js';
 import { sleep } from '../util/time.js';
 import type { GridOrderRow, ExitOrderRow, DealCloseReason } from '../storage/types.js';
 import type { ReconcileEvent } from './reconcileTypes.js';
 import type { ExitTargetMutation } from './exitTargets.js';
 import type { OrchestratorContext } from './types.js';
+import type { Logger } from '../logging/logger.js';
+import type { Notifier } from '../notify/types.js';
+import type { FillWatcher } from '../exchange/fillWatcher.js';
 
 export interface RunDealOptions {
   pollIntervalMs?: number;
@@ -33,6 +38,14 @@ export interface RunDealOptions {
    * them must not be a spontaneous halt for a 24/7 bot (PLAN.md).
    */
   haltConfirmationTicks?: number;
+  /**
+   * MVP §13.5: optional WS wake-up trigger. Purely a latency optimization —
+   * omitted (as in every test that doesn't set it), the loop behaves exactly
+   * as before, plain `sleep(pollIntervalMs)`. Never a source of truth: the
+   * following tick's reconcileTick always re-derives state from REST
+   * regardless of what woke it up.
+   */
+  fillWatcher?: FillWatcher;
 }
 
 export interface RunDealParams extends OrchestratorContext {
@@ -58,6 +71,18 @@ interface TickContext extends OrchestratorContext {
   dealId: string;
   gate: HaltGateState;
   haltConfirmationTicks: number;
+  /** Resolved once in runDealLoop (ctx.logger ?? noop) — always present here, unlike on OrchestratorContext. */
+  logger: Logger;
+  notifier: Notifier;
+}
+
+/** MVP §13.6: notifications are a best-effort side channel — a failed send must never block the state machine. */
+async function notifySafely(logger: Logger, notifier: Notifier, message: string): Promise<void> {
+  try {
+    await notifier.notify(message);
+  } catch (error) {
+    logger.warn({ error }, 'notifySafely: notifier.notify failed');
+  }
 }
 
 function contractsImpliedByDb(
@@ -112,7 +137,7 @@ function advanceHaltGate(
 }
 
 async function haltDeal(ctx: TickContext, reason: string): Promise<RunDealResult> {
-  const { adapter, db, config, dealId, now } = ctx;
+  const { adapter, db, config, dealId, now, logger, notifier } = ctx;
   // HALTED means "stop and wait for a human" — resting orders left live
   // could still execute unattended, which defeats the point. Cancel them;
   // never touch an open position itself (closing it is a real decision a
@@ -123,6 +148,9 @@ async function haltDeal(ctx: TickContext, reason: string): Promise<RunDealResult
     updateDeal(db, dealId, { status: 'HALTED', closeReason: 'error', closedAt: haltedAt });
     appendEvent(db, { dealId, eventType: 'halted', payload: { reason }, createdAt: haltedAt });
   });
+  logger.error({ dealId, reason }, 'deal HALTED');
+  // MVP §13.6: "HALTED дублюється гучною Telegram-нотифікацією" — this event must never be missed.
+  await notifySafely(logger, notifier, `HALTED: deal ${dealId} — ${reason}`);
   return { outcome: 'halted', reason };
 }
 
@@ -143,6 +171,7 @@ function applyExitMutations(
 }
 
 function warnIfLiquidationEntersGrid(
+  logger: Logger,
   gridRows: readonly GridOrderRow[],
   liquidationPrice: number | null,
   dealId: string,
@@ -152,15 +181,16 @@ function warnIfLiquidationEntersGrid(
     .filter((row) => row.status !== 'cancelled')
     .reduce((min, row) => Math.min(min, row.price), Infinity);
   if (Number.isFinite(deepest) && liquidationPrice >= deepest) {
-    // MVP §8: informational only — Slice 11 replaces this with pino + Telegram.
-    console.warn(
-      `runDeal: deal ${dealId} — liquidation price ${String(liquidationPrice)} has reached the grid's deepest resting rung (${String(deepest)})`,
+    // MVP §8: informational only.
+    logger.warn(
+      { dealId, liquidationPrice, deepestRungPrice: deepest },
+      "liquidation price has reached the grid's deepest resting rung",
     );
   }
 }
 
 async function gridPlacedTick(ctx: TickContext): Promise<'continue' | RunDealResult> {
-  const { adapter, db, config, now, dealId, gate, haltConfirmationTicks } = ctx;
+  const { adapter, db, config, now, dealId, gate, haltConfirmationTicks, logger, notifier } = ctx;
 
   const [openOrders, position] = await Promise.all([
     adapter.fetchOpenOrders(config.symbol),
@@ -276,6 +306,17 @@ async function gridPlacedTick(ctx: TickContext): Promise<'continue' | RunDealRes
       updateDeal(db, dealId, { status: 'ACTIVE', filledRungsCount: 1 });
     });
 
+    // MVP §13.6: "угода відкрилась" — the first fill is what actually opens the deal.
+    logger.info(
+      { dealId, avgEntry, takeProfitPrice: intent.takeProfitPrice },
+      'deal opened (first fill)',
+    );
+    await notifySafely(
+      logger,
+      notifier,
+      `Deal ${dealId} opened: avgEntry=${String(avgEntry)}, TP=${String(intent.takeProfitPrice)}`,
+    );
+
     return 'continue';
   }
 
@@ -334,7 +375,7 @@ async function gridPlacedTick(ctx: TickContext): Promise<'continue' | RunDealRes
 }
 
 async function activeTick(ctx: TickContext): Promise<'continue' | RunDealResult> {
-  const { adapter, db, config, now, dealId, gate, haltConfirmationTicks } = ctx;
+  const { adapter, db, config, now, dealId, gate, haltConfirmationTicks, logger, notifier } = ctx;
 
   const [openOrders, position] = await Promise.all([
     adapter.fetchOpenOrders(config.symbol),
@@ -346,7 +387,7 @@ async function activeTick(ctx: TickContext): Promise<'continue' | RunDealResult>
   const placedExit = exitRows.filter((row) => row.status === 'placed');
   const previousContracts = contractsImpliedByDb(gridRows, exitRows);
 
-  warnIfLiquidationEntersGrid(gridRows, position.liquidationPrice, dealId);
+  warnIfLiquidationEntersGrid(logger, gridRows, position.liquidationPrice, dealId);
 
   const events = reconcileTick({
     gridOrders: placedGrid.map((row) => ({
@@ -422,11 +463,9 @@ async function activeTick(ctx: TickContext): Promise<'continue' | RunDealResult>
     // reinvest growth this cycle" — same safe path as a loss.
     let netProfit: number | null;
     try {
-      netProfit = (await computeNet(adapter, config.symbol, deal.openedAt)).netProfit;
+      netProfit = (await computeNet(adapter, config.symbol, deal.openedAt, logger)).netProfit;
     } catch (error) {
-      console.warn(
-        `runDeal: computeNet failed for deal ${dealId}, closing with netProfit: null — ${String(error)}`,
-      );
+      logger.warn({ dealId, error }, 'computeNet failed, closing with netProfit: null');
       netProfit = null;
     }
 
@@ -485,6 +524,21 @@ async function activeTick(ctx: TickContext): Promise<'continue' | RunDealResult>
         });
       }
     });
+
+    logger.info({ dealId, closeReason, netProfit }, 'deal closed');
+    await notifySafely(
+      logger,
+      notifier,
+      `Deal ${dealId} closed (${closeReason}), NET=${netProfit === null ? 'unknown' : String(netProfit)}`,
+    );
+    if (haltAfterLoss) {
+      logger.error({ dealId }, 'deal HALTED after a loss (halt_after_loss)');
+      await notifySafely(
+        logger,
+        notifier,
+        `HALTED: deal ${dealId} — closed at a loss, halt_after_loss is set`,
+      );
+    }
 
     return { outcome: 'closed', closeReason };
   }
@@ -552,7 +606,54 @@ async function activeTick(ctx: TickContext): Promise<'continue' | RunDealResult>
     }
   });
 
+  if (rungFilledEvents.length > 0) {
+    // MVP §13.6: "ордер спрацював" / "усереднення" — a safety-order fill is
+    // both at once, one notification covers it.
+    logger.info(
+      { dealId, filledRungsCount: newFilledRungsCount, avgEntry: position.entryPrice },
+      'grid rung filled (averaging)',
+    );
+    await notifySafely(
+      logger,
+      notifier,
+      `Deal ${dealId}: rung filled, avg now ${String(position.entryPrice)}`,
+    );
+  }
+
   return 'continue';
+}
+
+/**
+ * Races the WS wake-up signal against the plain poll interval. A failed
+ * watch (dropped connection, transient error) must not win the race — it
+ * degrades to "this arm never resolves," so the sleep arm always wins
+ * instead, falling back to the ordinary poll cadence for this round. Only
+ * logs on a working<->broken TRANSITION, not every failed round, so a
+ * long WS outage doesn't spam the log at poll-interval frequency.
+ */
+function watchOrNeverThisRound(
+  fillWatcher: FillWatcher,
+  symbol: string,
+  logger: Logger,
+  wsHealth: { healthy: boolean },
+): Promise<void> {
+  return fillWatcher.next(symbol).then(
+    () => {
+      if (!wsHealth.healthy) {
+        logger.info('WS fill-watch recovered');
+        wsHealth.healthy = true;
+      }
+    },
+    (error: unknown) => {
+      if (wsHealth.healthy) {
+        logger.warn({ error }, 'WS fill-watch failed, falling back to poll cadence');
+        wsHealth.healthy = false;
+      }
+      return new Promise<void>(() => {
+        // Never resolves this round — the sleep race arm wins instead.
+      });
+    },
+  );
 }
 
 /**
@@ -567,13 +668,17 @@ export async function runDealLoop(
 ): Promise<RunDealResult> {
   const pollIntervalMs = ctx.options?.pollIntervalMs ?? 500;
   const haltConfirmationTicks = ctx.options?.haltConfirmationTicks ?? 2;
+  const fillWatcher = ctx.options?.fillWatcher;
   const gate: HaltGateState = { lastSignature: null, streak: 0 };
+  const logger = ctx.logger ?? createNoopLogger();
+  const notifier = ctx.notifier ?? createNoopNotifier();
+  const wsHealth = { healthy: true };
 
   for (;;) {
     const deal = getDeal(ctx.db, ctx.dealId);
     if (!deal) throw new Error(`runDeal: deal ${ctx.dealId} not found`);
 
-    const tickCtx: TickContext = { ...ctx, gate, haltConfirmationTicks };
+    const tickCtx: TickContext = { ...ctx, gate, haltConfirmationTicks, logger, notifier };
 
     let result: 'continue' | RunDealResult;
     if (deal.status === 'GRID_PLACED') {
@@ -585,7 +690,15 @@ export async function runDealLoop(
     }
 
     if (result !== 'continue') return result;
-    await sleep(pollIntervalMs);
+
+    if (fillWatcher) {
+      await Promise.race([
+        sleep(pollIntervalMs),
+        watchOrNeverThisRound(fillWatcher, ctx.config.symbol, logger, wsHealth),
+      ]);
+    } else {
+      await sleep(pollIntervalMs);
+    }
   }
 }
 
@@ -597,7 +710,7 @@ export async function runDealLoop(
  * reacts to whatever fills/cancels/reprices happen next, in any order.
  */
 export async function runDeal(params: RunDealParams): Promise<RunDealResult> {
-  const { adapter, db, now, dealId, entryPrice, options } = params;
+  const { adapter, db, now, dealId, entryPrice, options, logger, notifier } = params;
   // MVP §7: this deal's budget is the compounded deposit from the reinvest
   // chain (resolveDeposit.ts), not always the static config value — shadows
   // `config` for the rest of this function so every downstream read
@@ -657,5 +770,7 @@ export async function runDeal(params: RunDealParams): Promise<RunDealResult> {
     now,
     dealId,
     ...(options !== undefined ? { options } : {}),
+    ...(logger !== undefined ? { logger } : {}),
+    ...(notifier !== undefined ? { notifier } : {}),
   });
 }

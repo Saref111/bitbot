@@ -37,7 +37,7 @@ export interface AdoptExistingPositionParams extends OrchestratorContext {
 export async function adoptExistingPosition(
   params: AdoptExistingPositionParams,
 ): Promise<RunDealResult | null> {
-  const { adapter, db, config, now, dealId, options } = params;
+  const { adapter, db, config, now, dealId, options, logger, notifier } = params;
   if (!config.include_existing_position) return null;
 
   const position = await adapter.fetchPosition(config.symbol);
@@ -132,5 +132,7 @@ export async function adoptExistingPosition(
     now,
     dealId,
     ...(options !== undefined ? { options } : {}),
+    ...(logger !== undefined ? { logger } : {}),
+    ...(notifier !== undefined ? { notifier } : {}),
   });
 }
