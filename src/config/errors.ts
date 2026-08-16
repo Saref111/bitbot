@@ -1,9 +1,5 @@
 import type { ZodError } from 'zod';
-
-export interface ConfigIssue {
-  path: string;
-  message: string;
-}
+import { ConfigIssue } from './types.js';
 
 export class ConfigError extends Error {
   readonly issues: ConfigIssue[];

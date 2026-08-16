@@ -1,4 +1,4 @@
-import type { Timeframe } from '../candles/types.js';
+import type { Timeframe } from '../candles/index.js';
 
 export interface FilterSignal {
   active: boolean;
@@ -11,7 +11,7 @@ export interface BarCloseEvent {
   closeTime: number;
   /**
    * Indicator value computed for the closed bar, keyed by filter index.
-   * Computing this is the caller's job (Slice 8) — not this module's. `null`
+   * Computing this is the caller's job, not this module's. `null`
    * means the indicator hasn't warmed up yet (mirrors computeRsiSeries/
    * computeCciSeries returning null during warm-up) and is treated as an
    * evaluated-but-inactive result, not an error — a missing key entirely is

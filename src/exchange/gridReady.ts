@@ -1,16 +1,5 @@
-import type { GridPlan } from '../grid/types.js';
-import type { MarketInfo } from './types.js';
-
-export interface ReadyRung {
-  index: number;
-  price: number;
-  size: number;
-  notionalUsdt: number;
-  clientOrderId: string;
-}
-
-export type GridReadyResult =
-  { ok: true; rungs: ReadyRung[] } | { ok: false; reason: string; rungIndex: number };
+import { type GridPlan } from '../grid/index.js';
+import type { GridReadyResult, MarketInfo, ReadyRung } from './types.js';
 
 function cleanFloat(value: number, step: number): number {
   const decimals = Math.max(0, -Math.floor(Math.log10(step)));

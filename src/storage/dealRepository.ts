@@ -1,34 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { DealCloseReason, DealRow, DealStatus } from './types.js';
-
-export interface NewDeal {
-  id: string;
-  status: DealStatus;
-  direction: 'long' | 'short';
-  depositUsdt: number;
-  openedAt: number;
-}
-
-export interface DealPatch {
-  status?: DealStatus;
-  pEntry?: number;
-  filledRungsCount?: number;
-  depositUsdt?: number;
-  closeReason?: DealCloseReason;
-  closedAt?: number;
-  /** undefined = don't touch; null = explicitly clear (e.g. computeNet failed); number = the computed NET. */
-  netProfit?: number | null;
-}
-
-const PATCH_COLUMNS: Record<keyof DealPatch, string> = {
-  status: 'status',
-  pEntry: 'p_entry',
-  filledRungsCount: 'filled_rungs_count',
-  depositUsdt: 'deposit_usdt',
-  closeReason: 'close_reason',
-  closedAt: 'closed_at',
-  netProfit: 'net_profit',
-};
+import type { DealCloseReason, DealPatch, DealRow, DealStatus, NewDeal } from './types.js';
+import { PATCH_COLUMNS } from './constants.js';
 
 function mapRow(row: Record<string, unknown>): DealRow {
   return {

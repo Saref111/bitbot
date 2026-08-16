@@ -4,3 +4,8 @@ import type { entryFilterSchema, gridConfigSchema, configSchema } from './schema
 export type EntryFilter = z.infer<typeof entryFilterSchema>;
 export type GridConfig = z.infer<typeof gridConfigSchema>;
 export type Config = z.infer<typeof configSchema>;
+
+export interface ConfigIssue {
+  path: string;
+  message: string;
+}

@@ -1,34 +1,7 @@
-import { OrderNotFoundError } from '../exchange/types.js';
-import type { ExchangeAdapter } from '../exchange/types.js';
-import type { Config } from '../config/types.js';
-import type { NewExitOrder } from '../storage/exitOrderRepository.js';
-import type { ExitOrderRow } from '../storage/types.js';
-
-const PRICE_EPS = 1e-9;
-
-export type ExitTargetMutation =
-  | { kind: 'cancelled'; clientOrderId: string; cancelledAt: number }
-  | { kind: 'inserted'; exitOrder: NewExitOrder };
-
-export interface ReconcileExitTargetsParams {
-  adapter: ExchangeAdapter;
-  config: Config;
-  dealId: string;
-  /**
-   * Desired prices — the caller computes these via decide() (the single
-   * source of truth for the TP/SL formula, MVP §6); this function is purely
-   * a mechanical "make resting orders match" level-check, not a second
-   * place that knows the formula.
-   */
-  desiredTakeProfitPrice: number;
-  desiredStopLossPrice: number | null;
-  positionContracts: number;
-  /** Currently-resting ('placed') exit_order rows only. */
-  restingExitOrders: readonly ExitOrderRow[];
-  /** Full exit_order history for this deal (placed + cancelled + filled), to derive a stable next clientOrderId per type. */
-  allExitOrders: readonly ExitOrderRow[];
-  now: () => number;
-}
+import { OrderNotFoundError } from '../exchange/index.js';
+import type { ExitOrderRow } from '../storage/index.js';
+import { PRICE_EPS } from './constants.js';
+import type { ExitTargetMutation, ReconcileExitTargetsParams } from './types.js';
 
 /**
  * MVP §5/§6 (ACTIVE, "переставляємо TP (і SL) на нові рівні"): a level-check

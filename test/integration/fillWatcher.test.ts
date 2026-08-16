@@ -11,8 +11,7 @@ import {
 import { createBinanceAdapter } from '../../src/exchange/binanceAdapter.js';
 import { createBinanceFillWatcher } from '../../src/exchange/fillWatcher.js';
 import { sleep } from '../../src/util/time.js';
-import type { ExchangeAdapter } from '../../src/exchange/types.js';
-import type { FillWatcher } from '../../src/exchange/fillWatcher.js';
+import type { ExchangeAdapter, FillWatcher } from '../../src/exchange/types.js';
 
 const SYMBOL = 'ETH/USDT:USDT';
 

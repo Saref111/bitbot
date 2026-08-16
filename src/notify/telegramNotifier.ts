@@ -1,7 +1,4 @@
-import type { Notifier } from './types.js';
-import type { TelegramCredentials } from './credentials.js';
-
-type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
+import type { FetchLike, Notifier, TelegramCredentials } from './types.js';
 
 /**
  * MVP §13.6: Telegram-бот на ключові події. Talks to Telegram's HTTP API

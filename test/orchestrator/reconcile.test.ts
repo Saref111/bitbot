@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { reconcileTick } from '../../src/orchestrator/reconcile.js';
-import type { OpenOrder, Position } from '../../src/exchange/types.js';
+import { position } from '../helpers/fixtures.js';
+import type { OpenOrder } from '../../src/exchange/types.js';
 import type {
   PlacedExitOrderSnapshot,
   PlacedGridOrderSnapshot,
@@ -37,17 +38,6 @@ function openOrder(overrides: Partial<OpenOrder> = {}): OpenOrder {
     filled: 0,
     status: 'open',
     reduceOnly: false,
-    ...overrides,
-  };
-}
-
-function position(overrides: Partial<Position> = {}): Position {
-  return {
-    symbol: 'ETH/USDT:USDT',
-    side: 'long',
-    contracts: 0,
-    entryPrice: null,
-    liquidationPrice: null,
     ...overrides,
   };
 }

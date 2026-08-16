@@ -1,8 +1,8 @@
-import { supportedTimeframes } from '../config/schema.js';
+import { ONE_MINUTE_MS } from './constants.js';
+
+export const supportedTimeframes = ['1m', '5m', '15m', '30m', '1h'] as const;
 
 export type Timeframe = (typeof supportedTimeframes)[number];
-
-const ONE_MINUTE_MS = 60_000;
 
 export const TIMEFRAME_DURATION_MS: Record<Timeframe, number> = {
   '1m': ONE_MINUTE_MS,

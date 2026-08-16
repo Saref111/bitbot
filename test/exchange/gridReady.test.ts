@@ -1,16 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { makeGridExchangeReady } from '../../src/exchange/gridReady.js';
-import type { MarketInfo } from '../../src/exchange/types.js';
 import { projectGrid } from '../../src/grid/projectGrid.js';
 import { buildConfig } from '../helpers/buildConfig.js';
-
-const market: MarketInfo = {
-  symbol: 'ETH/USDT:USDT',
-  tickSize: 0.01,
-  stepSize: 0.001,
-  minNotional: 5,
-};
+import { defaultMarket as market } from '../helpers/fixtures.js';
 
 describe('makeGridExchangeReady — basic shape', () => {
   it('rounds prices to tickSize and sizes to stepSize', () => {

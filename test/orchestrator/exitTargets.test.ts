@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { reconcileExitTargets } from '../../src/orchestrator/exitTargets.js';
-import { OrderNotFoundError } from '../../src/exchange/types.js';
+import { OrderNotFoundError } from '../../src/exchange/errors.js';
 import { buildConfig } from '../helpers/buildConfig.js';
 import type { ExchangeAdapter } from '../../src/exchange/types.js';
 import type { ExitOrderRow } from '../../src/storage/types.js';

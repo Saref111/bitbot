@@ -1,8 +1,6 @@
-import { requireAt } from '../util/arrays.js';
-import { TIMEFRAME_DURATION_MS } from './types.js';
-import type { Candle, Timeframe } from './types.js';
-
-const ONE_MINUTE_MS = TIMEFRAME_DURATION_MS['1m'];
+import { requireAt } from '../util/index.js';
+import { ONE_MINUTE_MS } from './constants.js';
+import { TIMEFRAME_DURATION_MS, type Candle, type Timeframe } from './types.js';
 
 /**
  * MVP §13.1: one 1m stream is aggregated locally into higher timeframes;
@@ -10,7 +8,7 @@ const ONE_MINUTE_MS = TIMEFRAME_DURATION_MS['1m'];
  * aligned groups are emitted — an incomplete trailing (or leading, if the
  * input doesn't start on a boundary) group is dropped rather than emitted
  * early, since it isn't closed yet. Assumes contiguous, gap-free 1m input;
- * data-feed gap handling is a Slice 8 (live feed) concern, not this pure
+ * data-feed gap handling is the live feed module's concern, not this pure
  * function's job.
  */
 export function aggregateCandles(

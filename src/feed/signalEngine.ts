@@ -1,16 +1,11 @@
-import { aggregateCandles } from '../candles/aggregate.js';
-import { computeRsiSeries } from '../indicators/rsi.js';
-import { computeCciSeries } from '../indicators/cci.js';
-import { applyBarClose, allFiltersActive } from '../filters/signals.js';
-import { requireAt } from '../util/arrays.js';
-import type { Candle, Timeframe } from '../candles/types.js';
-import type { Config, EntryFilter } from '../config/types.js';
-import type { EntrySignal, SignalEngineState } from './types.js';
-
-// MVP §5: checked from higher timeframes to lower. The final AND result
-// doesn't actually depend on this order (each filter updates independently
-// of the others), but processing in this order matches the spec.
-const TIMEFRAME_ORDER: readonly Timeframe[] = ['1h', '30m', '15m', '5m', '1m'];
+import { aggregateCandles } from '../candles/index.js';
+import { requireAt } from '../util/index.js';
+import type { Candle } from '../candles/index.js';
+import type { Config, EntryFilter } from '../config/index.js';
+import type { EntrySignal, IndicatorComputer, SignalEngineState } from './types.js';
+import { TIMEFRAME_ORDER } from './constants.js';
+import { computeCciSeries, computeRsiSeries } from '../indicators/index.js';
+import { allFiltersActive, applyBarClose } from '../filters/index.js';
 
 export function createSignalEngine(config: Config): SignalEngineState {
   return {
@@ -19,8 +14,6 @@ export function createSignalEngine(config: Config): SignalEngineState {
     filterStates: config.entry_filters.map(() => null),
   };
 }
-
-type IndicatorComputer = (filter: EntryFilter, candles: readonly Candle[]) => number | null;
 
 const INDICATOR_COMPUTERS: Record<string, IndicatorComputer> = {
   RSI: (filter, candles) =>

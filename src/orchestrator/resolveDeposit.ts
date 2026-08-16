@@ -1,11 +1,11 @@
-import { getMostRecentClosedDeal } from '../storage/dealRepository.js';
+import { getMostRecentClosedDeal } from '../storage/index.js';
 import type { DatabaseSync } from 'node:sqlite';
-import type { Config } from '../config/types.js';
+import type { Config } from '../config/index.js';
 
 /**
  * MVP §7: the reinvest chain lives in deal.deposit_usdt/net_profit, not a
  * separate state table. Only a `SETTLING` deal is trusted as a chain base —
- * a `HALTED` one (Slice 9 review) breaks the chain deliberately: its
+ * a `HALTED` one breaks the chain deliberately: its
  * deposit_usdt is a MODEL of what was allocated, not a fact about the
  * account, and after a liquidation specifically the two can diverge hard
  * (real balance collapses; the modeled deposit doesn't know that). HALTED

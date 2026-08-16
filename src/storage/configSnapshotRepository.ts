@@ -1,7 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { configSchema } from '../config/schema.js';
-import { ConfigError } from '../config/errors.js';
-import type { Config } from '../config/types.js';
+import { type Config, configSchema, ConfigError } from '../config/index.js';
 
 /** MVP §10: one immutable config snapshot per deal, taken at GRID_PLACED, so later config edits don't affect an active deal. */
 export function insertConfigSnapshot(

@@ -1,4 +1,4 @@
-import type { EntryFilter } from '../config/types.js';
+import type { EntryFilter } from '../config/index.js';
 import type { BarCloseEvent, FilterSignal } from './types.js';
 
 /**

@@ -1,14 +1,5 @@
-export interface ExchangeCredentials {
-  apiKey: string;
-  apiSecret: string;
-  testnet: boolean;
-}
+import type { ExchangeCredentials } from './types.js';
 
-/**
- * Reads process.env directly — the caller is responsible for loading .env
- * first (e.g. `dotenv.config()`), so this stays a plain, side-effect-free
- * function to test.
- */
 export function loadExchangeCredentials(): ExchangeCredentials {
   const apiKey = process.env.BINANCE_API_KEY;
   const apiSecret = process.env.BINANCE_API_SECRET;

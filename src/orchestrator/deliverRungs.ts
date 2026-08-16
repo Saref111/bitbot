@@ -1,19 +1,4 @@
-import type { ExchangeAdapter } from '../exchange/types.js';
-import type { Config } from '../config/types.js';
-import type { GridOrderPatch } from '../storage/gridOrderRepository.js';
-import type { GridOrderRow } from '../storage/types.js';
-
-export interface DeliverRungsParams {
-  adapter: ExchangeAdapter;
-  config: Config;
-  gridOrders: readonly GridOrderRow[];
-  now: () => number;
-}
-
-export interface GridOrderMutation {
-  clientOrderId: string;
-  patch: GridOrderPatch;
-}
+import type { DeliverRungsParams, GridOrderMutation } from './types.js';
 
 /**
  * MVP §4.3: only `partial_placement` (K) rungs are ever resting on the

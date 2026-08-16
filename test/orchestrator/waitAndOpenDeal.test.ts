@@ -4,36 +4,9 @@ import { getDeal } from '../../src/storage/dealRepository.js';
 import { getGridOrdersByDeal } from '../../src/storage/gridOrderRepository.js';
 import { waitAndOpenDeal } from '../../src/orchestrator/waitAndOpenDeal.js';
 import { buildConfig } from '../helpers/buildConfig.js';
-import type {
-  CreateOrderParams,
-  ExchangeAdapter,
-  MarketInfo,
-  OpenOrder,
-  Position,
-} from '../../src/exchange/types.js';
-import type { Candle } from '../../src/candles/types.js';
+import { candle, defaultMarket as market, position } from '../helpers/fixtures.js';
+import type { CreateOrderParams, ExchangeAdapter, OpenOrder } from '../../src/exchange/types.js';
 import type { EntryFilter } from '../../src/config/types.js';
-
-const market: MarketInfo = {
-  symbol: 'ETH/USDT:USDT',
-  tickSize: 0.01,
-  stepSize: 0.001,
-  minNotional: 5,
-};
-const ONE_MINUTE_MS = 60_000;
-const START = Date.UTC(2026, 0, 1, 0, 0, 0);
-
-function candle(index: number, close: number): Candle {
-  const openTime = START + index * ONE_MINUTE_MS;
-  return {
-    openTime,
-    closeTime: openTime + ONE_MINUTE_MS,
-    open: close,
-    high: close,
-    low: close,
-    close,
-  };
-}
 
 function openOrder(overrides: Partial<OpenOrder> = {}): OpenOrder {
   return {
@@ -45,17 +18,6 @@ function openOrder(overrides: Partial<OpenOrder> = {}): OpenOrder {
     filled: 0,
     status: 'open',
     reduceOnly: false,
-    ...overrides,
-  };
-}
-
-function position(overrides: Partial<Position> = {}): Position {
-  return {
-    symbol: 'ETH/USDT:USDT',
-    side: 'long',
-    contracts: 0,
-    entryPrice: null,
-    liquidationPrice: null,
     ...overrides,
   };
 }

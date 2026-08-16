@@ -1,7 +1,4 @@
-export interface TelegramCredentials {
-  botToken: string;
-  chatId: string;
-}
+import { TelegramCredentials } from './types.js';
 
 /**
  * Unlike loadExchangeCredentials, this does NOT throw when unset — Telegram

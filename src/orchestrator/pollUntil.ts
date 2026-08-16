@@ -1,15 +1,7 @@
-import { sleep } from '../util/time.js';
+import { sleep } from '../util/index.js';
+import type { PollOptions } from './types.js';
 
-export interface PollOptions {
-  intervalMs: number;
-  timeoutMs: number;
-}
-
-/**
- * MVP §13.5: the primary fill-detection channel is the user-data-stream
- * (Slice 11); this is the fallback-poll mechanism used standalone for this
- * thin slice, since websocket wiring isn't built yet.
- */
+/** Polls `check` until it returns non-null, or throws after `timeoutMs`. */
 export async function pollUntil<T>(
   check: () => Promise<T | null>,
   options: PollOptions,

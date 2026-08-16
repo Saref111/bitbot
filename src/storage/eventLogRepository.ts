@@ -1,12 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { EventLogRow } from './types.js';
-
-export interface NewEvent {
-  dealId: string | null;
-  eventType: string;
-  payload?: unknown;
-  createdAt: number;
-}
+import type { EventLogRow, NewEvent } from './types.js';
 
 function mapRow(row: Record<string, unknown>): EventLogRow {
   return {
