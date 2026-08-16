@@ -1,10 +1,29 @@
 import { EPS } from './constants.js';
+import type { ExitOrderRow, GridOrderRow } from '../storage/index.js';
 import type {
   ReconcileEvent,
   ReconcileTickInput,
   PlacedExitOrderSnapshot,
   PlacedGridOrderSnapshot,
 } from './reconcileTypes.js';
+
+/** The `previousContracts` baseline reconcileTick needs, derived from what's already committed to the DB. */
+export function contractsImpliedByDb(
+  gridRows: readonly GridOrderRow[],
+  exitRows: readonly ExitOrderRow[],
+): number {
+  const grid = gridRows.reduce((sum, row) => {
+    if (row.status === 'filled') return sum + row.size;
+    if (row.status === 'placed') return sum + row.filledSize;
+    return sum;
+  }, 0);
+  const exit = exitRows.reduce((sum, row) => {
+    if (row.status === 'filled') return sum + row.amount;
+    if (row.status === 'placed') return sum + row.filledSize;
+    return sum;
+  }, 0);
+  return grid - exit;
+}
 
 /**
  * MVP §5/§9: classifies what happened to resting grid/exit orders between
