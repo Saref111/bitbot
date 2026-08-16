@@ -1,5 +1,5 @@
 import { binanceusdm, pro } from 'ccxt';
-import type { ExchangeCredentials } from './credentials.js';
+import type { BinanceProClient, ExchangeCredentials } from './types.js';
 
 /** The only place a real ccxt client gets constructed — everything else depends on the narrow CcxtLike interface. */
 export function createBinanceCcxtClient(credentials: ExchangeCredentials): binanceusdm {
@@ -17,8 +17,6 @@ export function createBinanceCcxtClient(credentials: ExchangeCredentials): binan
   }
   return client;
 }
-
-type BinanceProClient = InstanceType<(typeof pro)['binanceusdm']>;
 
 /**
  * MVP §13.5: ccxt's WebSocket ("pro") variant — same package (`ccxt.pro`,

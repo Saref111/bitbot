@@ -2,30 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { watchForEntry } from '../../src/feed/liveFeed.js';
 import { requireAt } from '../../src/util/arrays.js';
 import { buildConfig } from '../helpers/buildConfig.js';
-import type { ExchangeAdapter, MarketInfo } from '../../src/exchange/types.js';
-import type { Candle } from '../../src/candles/types.js';
+import { candle, defaultMarket as market } from '../helpers/fixtures.js';
+import type { ExchangeAdapter } from '../../src/exchange/types.js';
 import type { EntryFilter } from '../../src/config/types.js';
-
-const market: MarketInfo = {
-  symbol: 'ETH/USDT:USDT',
-  tickSize: 0.01,
-  stepSize: 0.001,
-  minNotional: 5,
-};
-const ONE_MINUTE_MS = 60_000;
-const START = Date.UTC(2026, 0, 1, 0, 0, 0);
-
-function candle(index: number, close: number): Candle {
-  const openTime = START + index * ONE_MINUTE_MS;
-  return {
-    openTime,
-    closeTime: openTime + ONE_MINUTE_MS,
-    open: close,
-    high: close,
-    low: close,
-    close,
-  };
-}
 
 function makeAdapter(fetchOHLCV: ExchangeAdapter['fetchOHLCV']): ExchangeAdapter {
   return {

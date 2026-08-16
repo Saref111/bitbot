@@ -1,5 +1,5 @@
-import { requireAt } from '../util/arrays.js';
-import type { Candle } from '../candles/types.js';
+import { requireAt } from '../util/index.js';
+import type { Candle } from '../candles/index.js';
 
 /**
  * MVP §13.2: CCI = (TypicalPrice - SMA(TypicalPrice, period)) /

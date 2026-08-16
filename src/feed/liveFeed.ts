@@ -1,26 +1,15 @@
-import { sleep } from '../util/time.js';
+import { sleep } from '../util/index.js';
 import { createSignalEngine, ingestOneMinuteCandle } from './signalEngine.js';
-import type { ExchangeAdapter } from '../exchange/types.js';
-import type { Config } from '../config/types.js';
-import type { EntrySignal } from './types.js';
-
-export interface WatchForEntryParams {
-  adapter: ExchangeAdapter;
-  config: Config;
-  /** How much 1m history to backfill before going live (MVP §13.1 warm-up). */
-  warmupCandles?: number;
-  pollIntervalMs?: number;
-  /** Injectable clock, defaults to Date.now — see the still-forming-bar guard below. */
-  now?: () => number;
-}
+import type { EntrySignal, WatchForEntryParams } from './types.js';
 
 /**
  * MVP §5 (WAITING_SIGNAL) + §13.1: backfills warm-up history into the
  * signal engine (without acting on it — a signal computed from stale
  * historical data shouldn't retroactively open a deal), then polls for new
  * 1m candles and feeds each one in until entry fires. Primary channel is
- * polling here (MVP §13.5's websocket primary / poll fallback split is
- * Slice 11 — not built yet).
+ * polling here (MVP §13.5's websocket primary / poll fallback split for the
+ * candle feed itself is not built yet — only order fills use a websocket
+ * channel).
  *
  * Binance's fetchOHLCV always returns the currently-forming bar as its last
  * element (a resting, not-yet-closed candle). Ingesting it would compute
@@ -28,8 +17,8 @@ export interface WatchForEntryParams {
  * the time the bar actually closes — exactly what bar_close semantics exist
  * to prevent. So any candle whose closeTime is still in the future is
  * skipped (not fed in, not marked as seen) and picked up again, now closed,
- * on a later poll. Slice 11's websocket kline stream carries this natively
- * (the `k.x` "bar closed" flag); this guard covers the poll-only fallback.
+ * on a later poll. A websocket kline stream (the `k.x` "bar closed" flag)
+ * would carry this natively; this guard covers the poll-only path used here.
  */
 export async function watchForEntry(params: WatchForEntryParams): Promise<EntrySignal> {
   const { adapter, config } = params;

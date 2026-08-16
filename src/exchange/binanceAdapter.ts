@@ -1,17 +1,9 @@
 import { OrderNotFound } from 'ccxt';
+import type { OHLCV, Order } from 'ccxt';
+import { TIMEFRAME_DURATION_MS, type Candle, type Timeframe } from '../candles/index.js';
+import { OrderNotFoundError } from './errors.js';
 import type {
-  Market,
-  Order,
-  OHLCV,
-  Position as CcxtPosition,
-  FundingRate as CcxtFundingRate,
-  Trade as CcxtTrade,
-  FundingHistory as CcxtFundingHistory,
-} from 'ccxt';
-import { TIMEFRAME_DURATION_MS } from '../candles/types.js';
-import type { Candle, Timeframe } from '../candles/types.js';
-import { OrderNotFoundError } from './types.js';
-import type {
+  CcxtLike,
   CreateOrderParams,
   ExchangeAdapter,
   FundingPayment,
@@ -22,45 +14,6 @@ import type {
   Position,
   TradeInfo,
 } from './types.js';
-
-/**
- * Narrow slice of ccxt's Exchange surface that this adapter actually calls —
- * lets unit tests supply a plain mock instead of satisfying ccxt's full
- * (huge) Exchange class shape. A real ccxt.binanceusdm instance structurally
- * satisfies this already (see binanceClient.ts).
- */
-export interface CcxtLike {
-  loadMarkets: (reload?: boolean) => Promise<unknown>;
-  setPositionMode: (hedged: boolean, symbol?: string) => Promise<unknown>;
-  setMarginMode: (marginMode: string, symbol?: string) => Promise<unknown>;
-  setLeverage: (leverage: number, symbol?: string) => Promise<unknown>;
-  market: (symbol: string) => Market;
-  fetchOHLCV: (
-    symbol: string,
-    timeframe?: string,
-    since?: number,
-    limit?: number,
-  ) => Promise<OHLCV[]>;
-  fetchPositions: (symbols?: string[]) => Promise<CcxtPosition[]>;
-  createOrder: (
-    symbol: string,
-    type: string,
-    side: string,
-    amount: number,
-    price?: number,
-    params?: Record<string, unknown>,
-  ) => Promise<Order>;
-  fetchOpenOrders: (symbol?: string) => Promise<Order[]>;
-  cancelOrder: (id: string, symbol?: string, params?: Record<string, unknown>) => Promise<Order>;
-  cancelAllOrders: (symbol?: string) => Promise<Order[]>;
-  fetchFundingRate: (symbol: string) => Promise<CcxtFundingRate>;
-  fetchMyTrades: (symbol?: string, since?: number, limit?: number) => Promise<CcxtTrade[]>;
-  fetchFundingHistory: (
-    symbol?: string,
-    since?: number,
-    limit?: number,
-  ) => Promise<CcxtFundingHistory[]>;
-}
 
 function toCandle(row: OHLCV, timeframe: Timeframe): Candle {
   const [openTime, open, high, low, close] = row;
@@ -91,15 +44,15 @@ function isNoChangeNeededError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('No need to change');
 }
 
-// Slice 9: a crash between createOrder succeeding on the exchange and the
-// tick's DB write committing means a retry (recoverDeal re-running the same
-// tick) submits the SAME deterministic clientOrderId again. Binance rejects
-// that as code -4116 "ClientOrderId is duplicated." rather than silently
+// A crash between createOrder succeeding on the exchange and the tick's DB
+// write committing means a retry (recoverDeal re-running the same tick)
+// submits the SAME deterministic clientOrderId again. Binance rejects that
+// as code -4116 "ClientOrderId is duplicated." rather than silently
 // returning the existing order — but a duplicate of an order we ourselves
 // already placed with this exact id IS the desired end state, not a
-// failure. Verified against Binance testnet (Slice 9) — an earlier guess of
-// -4015 turned out to be wrong; matched on the numeric code (stable
-// identifier), not the message text.
+// failure. Verified against Binance testnet — an earlier guess of -4015
+// turned out to be wrong; matched on the numeric code (stable identifier),
+// not the message text.
 function isDuplicateClientOrderIdError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('"code":-4116');
 }
@@ -206,7 +159,7 @@ export function createBinanceAdapter(client: CcxtLike): ExchangeAdapter {
     // cancelling by clientOrderId via params.origClientOrderId, which is
     // what we have persisted (never the exchange's own id) — mirrors how
     // createOrder threads clientOrderId through params, not a positional
-    // arg. Verified against Binance testnet (Slice 9).
+    // arg. Verified against Binance testnet.
     async cancelOrder(symbol, clientOrderId) {
       try {
         await client.cancelOrder('', symbol, { origClientOrderId: clientOrderId });

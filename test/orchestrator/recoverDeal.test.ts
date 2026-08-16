@@ -8,15 +8,8 @@ import {
 } from '../../src/storage/gridOrderRepository.js';
 import { insertExitOrder } from '../../src/storage/exitOrderRepository.js';
 import { recoverDeal } from '../../src/orchestrator/recoverDeal.js';
-import { buildConfig } from '../helpers/buildConfig.js';
-import type { ExchangeAdapter, MarketInfo, OpenOrder, Position } from '../../src/exchange/types.js';
-
-const market: MarketInfo = {
-  symbol: 'ETH/USDT:USDT',
-  tickSize: 0.01,
-  stepSize: 0.001,
-  minNotional: 5,
-};
+import { defaultMarket as market, position, twoRungConfig } from '../helpers/fixtures.js';
+import type { ExchangeAdapter, OpenOrder } from '../../src/exchange/types.js';
 
 function order(overrides: Partial<OpenOrder> = {}): OpenOrder {
   return {
@@ -32,17 +25,6 @@ function order(overrides: Partial<OpenOrder> = {}): OpenOrder {
   };
 }
 
-function pos(overrides: Partial<Position> = {}): Position {
-  return {
-    symbol: 'ETH/USDT:USDT',
-    side: 'long',
-    contracts: 0,
-    entryPrice: null,
-    liquidationPrice: null,
-    ...overrides,
-  };
-}
-
 function makeMockAdapter(overrides: Partial<ExchangeAdapter> = {}): ExchangeAdapter {
   return {
     setupSymbol: vi.fn().mockResolvedValue(undefined),
@@ -52,7 +34,7 @@ function makeMockAdapter(overrides: Partial<ExchangeAdapter> = {}): ExchangeAdap
       .mockResolvedValue([
         { openTime: 0, closeTime: 60_000, open: 2000, high: 2000, low: 2000, close: 2000 },
       ]),
-    fetchPosition: vi.fn().mockResolvedValue(pos()),
+    fetchPosition: vi.fn().mockResolvedValue(position()),
     createOrder: vi.fn().mockImplementation((params: { clientOrderId: string }) =>
       Promise.resolve({
         id: `ex-${params.clientOrderId}`,
@@ -68,24 +50,6 @@ function makeMockAdapter(overrides: Partial<ExchangeAdapter> = {}): ExchangeAdap
     fetchFundingHistory: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
-}
-
-function twoRungConfig() {
-  return buildConfig({
-    deposit_usdt: 200,
-    leverage: 3,
-    grid: {
-      orders: 2,
-      overlap_pct: 5,
-      indent_pct: 0.2,
-      martingale_pct: 0,
-      log_distribution: 1,
-      partial_placement: null,
-      runaway_cancel_pct: 0.5,
-    },
-    take_profit_pct: 1,
-    stop_loss: null,
-  });
 }
 
 describe('recoverDeal — terminal / trivial statuses', () => {
@@ -226,9 +190,13 @@ describe('recoverDeal — resumes GRID_PLACED (catches up on what happened durin
 
     const fetchPosition = vi
       .fn()
-      .mockResolvedValueOnce(pos({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }))
-      .mockResolvedValueOnce(pos({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }))
-      .mockResolvedValue(pos({ contracts: 0, entryPrice: null }));
+      .mockResolvedValueOnce(
+        position({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }),
+      )
+      .mockResolvedValueOnce(
+        position({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }),
+      )
+      .mockResolvedValue(position({ contracts: 0, entryPrice: null }));
 
     const adapter = makeMockAdapter({ fetchOpenOrders, fetchPosition });
     let t = 1000;
@@ -286,7 +254,7 @@ describe('recoverDeal — resumes ACTIVE (catches up on what happened during dow
       fetchOpenOrders: vi
         .fn()
         .mockResolvedValue([order({ clientOrderId: 'deal-1-2', price: 1900, amount: 0.157 })]),
-      fetchPosition: vi.fn().mockResolvedValue(pos({ contracts: 0, entryPrice: null })),
+      fetchPosition: vi.fn().mockResolvedValue(position({ contracts: 0, entryPrice: null })),
     });
     let t = 1000;
 
@@ -358,10 +326,14 @@ describe('recoverDeal — orphan reconciliation (exchange ahead of DB: createOrd
 
     const fetchPosition = vi
       .fn()
-      .mockResolvedValueOnce(pos({ contracts: 0 }))
-      .mockResolvedValueOnce(pos({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }))
-      .mockResolvedValueOnce(pos({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }))
-      .mockResolvedValue(pos({ contracts: 0, entryPrice: null }));
+      .mockResolvedValueOnce(position({ contracts: 0 }))
+      .mockResolvedValueOnce(
+        position({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }),
+      )
+      .mockResolvedValueOnce(
+        position({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }),
+      )
+      .mockResolvedValue(position({ contracts: 0, entryPrice: null }));
 
     const adapter = makeMockAdapter({ fetchOpenOrders, fetchPosition });
     let t = 1000;
@@ -437,9 +409,13 @@ describe('recoverDeal — orphan reconciliation (exchange ahead of DB: createOrd
 
     const fetchPosition = vi
       .fn()
-      .mockResolvedValueOnce(pos({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }))
-      .mockResolvedValueOnce(pos({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }))
-      .mockResolvedValue(pos({ contracts: 0, entryPrice: null }));
+      .mockResolvedValueOnce(
+        position({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }),
+      )
+      .mockResolvedValueOnce(
+        position({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }),
+      )
+      .mockResolvedValue(position({ contracts: 0, entryPrice: null }));
 
     const adapter = makeMockAdapter({ fetchOpenOrders, fetchPosition });
     let t = 1000;

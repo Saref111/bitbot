@@ -1,4 +1,4 @@
-import { requireAt } from '../util/arrays.js';
+import { requireAt } from '../util/index.js';
 
 function rsiFromAverages(avgGain: number, avgLoss: number): number {
   // MVP.md does not define the flat-price case (no movement at all in the

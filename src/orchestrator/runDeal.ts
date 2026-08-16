@@ -1,80 +1,41 @@
-import { insertDeal, updateDeal, getDeal } from '../storage/dealRepository.js';
-import { getGridOrdersByDeal, updateGridOrderStatus } from '../storage/gridOrderRepository.js';
 import {
+  insertDeal,
+  updateDeal,
+  getDeal,
+  getGridOrdersByDeal,
+  updateGridOrderStatus,
   getExitOrdersByDeal,
   insertExitOrder,
   updateExitOrderStatus,
-} from '../storage/exitOrderRepository.js';
-import { appendEvent } from '../storage/eventLogRepository.js';
-import { placeGrid } from '../storage/placeGrid.js';
-import { runInTransaction } from '../storage/transaction.js';
-import { projectGrid } from '../grid/projectGrid.js';
-import { averageEntry } from '../grid/averageEntry.js';
-import { makeGridExchangeReady } from '../exchange/gridReady.js';
-import { decide } from '../strategy/decide.js';
+  appendEvent,
+  placeGrid,
+  runInTransaction,
+} from '../storage/index.js';
+import { projectGrid, averageEntry } from '../grid/index.js';
+import { makeGridExchangeReady } from '../exchange/index.js';
+import { decide } from '../strategy/index.js';
 import { reconcileTick } from './reconcile.js';
 import { shouldCancelForRunaway } from './runaway.js';
 import { deliverNextRungs } from './deliverRungs.js';
 import { reconcileExitTargets } from './exitTargets.js';
 import { computeNet } from './computeNet.js';
 import { resolveDepositUsdt } from './resolveDeposit.js';
-import { createNoopLogger } from '../logging/logger.js';
-import { createNoopNotifier } from '../notify/noopNotifier.js';
-import { sleep } from '../util/time.js';
-import type { GridOrderRow, ExitOrderRow, DealCloseReason } from '../storage/types.js';
+import { createNoopLogger, type Logger } from '../logging/index.js';
+import { createNoopNotifier, type Notifier } from '../notify/index.js';
+import { sleep } from '../util/index.js';
+import { EPS } from './constants.js';
+import type { DealCloseReason, GridOrderRow, ExitOrderRow } from '../storage/index.js';
 import type { ReconcileEvent } from './reconcileTypes.js';
-import type { ExitTargetMutation } from './exitTargets.js';
-import type { OrchestratorContext } from './types.js';
-import type { Logger } from '../logging/logger.js';
-import type { Notifier } from '../notify/types.js';
-import type { FillWatcher } from '../exchange/fillWatcher.js';
-
-export interface RunDealOptions {
-  pollIntervalMs?: number;
-  /**
-   * How many CONSECUTIVE ticks a cancel/divergence anomaly must repeat
-   * before actually halting. fetchPosition/fetchOpenOrders are two separate
-   * REST calls, not one atomic snapshot — a one-tick disagreement between
-   * them must not be a spontaneous halt for a 24/7 bot (PLAN.md).
-   */
-  haltConfirmationTicks?: number;
-  /**
-   * MVP §13.5: optional WS wake-up trigger. Purely a latency optimization —
-   * omitted (as in every test that doesn't set it), the loop behaves exactly
-   * as before, plain `sleep(pollIntervalMs)`. Never a source of truth: the
-   * following tick's reconcileTick always re-derives state from REST
-   * regardless of what woke it up.
-   */
-  fillWatcher?: FillWatcher;
-}
-
-export interface RunDealParams extends OrchestratorContext {
-  dealId: string;
-  /** Price captured at the moment of entry (Slice 8: when filters align). */
-  entryPrice: number;
-  options?: RunDealOptions;
-}
-
-export type RunDealResult =
-  | { outcome: 'closed'; closeReason: DealCloseReason }
-  | { outcome: 'runaway' }
-  | { outcome: 'halted'; reason: string };
-
-const CONTRACTS_EPS = 1e-9;
-
-interface HaltGateState {
-  lastSignature: string | null;
-  streak: number;
-}
-
-interface TickContext extends OrchestratorContext {
-  dealId: string;
-  gate: HaltGateState;
-  haltConfirmationTicks: number;
-  /** Resolved once in runDealLoop (ctx.logger ?? noop) — always present here, unlike on OrchestratorContext. */
-  logger: Logger;
-  notifier: Notifier;
-}
+import type {
+  ExitTargetMutation,
+  HaltGateState,
+  OrchestratorContext,
+  RunDealOptions,
+  RunDealParams,
+  RunDealResult,
+  TickContext,
+} from './types.js';
+import type { FillWatcher } from '../exchange/index.js';
 
 /** MVP §13.6: notifications are a best-effort side channel — a failed send must never block the state machine. */
 async function notifySafely(logger: Logger, notifier: Notifier, message: string): Promise<void> {
@@ -343,7 +304,7 @@ async function gridPlacedTick(ctx: TickContext): Promise<'continue' | RunDealRes
   // Same race the full-fill case already guards against: reconciliation
   // output always takes precedence over runaway, whether the fill was full
   // or partial.
-  if (position.contracts <= CONTRACTS_EPS) {
+  if (position.contracts <= EPS) {
     const candles = await adapter.fetchOHLCV(config.symbol, '1m', undefined, 1);
     const currentPrice = candles.at(-1)?.close;
     if (currentPrice === undefined) {
@@ -680,13 +641,19 @@ export async function runDealLoop(
 
     const tickCtx: TickContext = { ...ctx, gate, haltConfirmationTicks, logger, notifier };
 
+    // Not a full exhaustive switch+assertNever: this loop deliberately only
+    // DRIVES 2 of the 5 statuses (the other 3 are a caller error, not a
+    // state this function is meant to handle).
     let result: 'continue' | RunDealResult;
-    if (deal.status === 'GRID_PLACED') {
-      result = await gridPlacedTick(tickCtx);
-    } else if (deal.status === 'ACTIVE') {
-      result = await activeTick(tickCtx);
-    } else {
-      throw new Error(`runDeal: cannot drive deal ${ctx.dealId} in status '${deal.status}'`);
+    switch (deal.status) {
+      case 'GRID_PLACED':
+        result = await gridPlacedTick(tickCtx);
+        break;
+      case 'ACTIVE':
+        result = await activeTick(tickCtx);
+        break;
+      default:
+        throw new Error(`runDeal: cannot drive deal ${ctx.dealId} in status '${deal.status}'`);
     }
 
     if (result !== 'continue') return result;
@@ -705,9 +672,8 @@ export async function runDealLoop(
 /**
  * MVP §5 (GRID_PLACED -> ...): computes the grid once, persists it and
  * places the first `partial_placement` rungs, then hands off to
- * runDealLoop. Replaces Slice 7's openDeal/closeDeal/runThinSlice — those
- * only ever handled exactly one entry fill then exactly one exit fill; this
- * reacts to whatever fills/cancels/reprices happen next, in any order.
+ * runDealLoop, which reacts to whatever fills/cancels/reprices happen next,
+ * in any order (not just one entry fill followed by one exit fill).
  */
 export async function runDeal(params: RunDealParams): Promise<RunDealResult> {
   const { adapter, db, now, dealId, entryPrice, options, logger, notifier } = params;

@@ -1,21 +1,14 @@
-import { restoreDeal } from '../storage/restoreDeal.js';
-import { updateDeal } from '../storage/dealRepository.js';
-import { updateGridOrderStatus } from '../storage/gridOrderRepository.js';
-import { insertExitOrder } from '../storage/exitOrderRepository.js';
-import { appendEvent } from '../storage/eventLogRepository.js';
-import { runInTransaction } from '../storage/transaction.js';
+import {
+  restoreDeal,
+  updateDeal,
+  updateGridOrderStatus,
+  insertExitOrder,
+  runInTransaction,
+  appendEvent,
+} from '../storage/index.js';
+import type { NewExitOrder, RestoredDeal } from '../storage/index.js';
 import { runDealLoop } from './runDeal.js';
-import type { RunDealOptions, RunDealResult } from './runDeal.js';
-import type { OrchestratorContext } from './types.js';
-import type { NewExitOrder } from '../storage/exitOrderRepository.js';
-import type { RestoredDeal } from '../storage/restoreDeal.js';
-
-export type RecoverDealResult = RunDealResult | { outcome: 'no-deal' };
-
-export interface RecoverDealParams extends OrchestratorContext {
-  dealId: string;
-  options?: RunDealOptions;
-}
+import type { RecoverDealParams, RecoverDealResult } from './types.js';
 
 function assertNever(value: never): never {
   throw new Error(`recoverDeal: unhandled deal status: ${String(value)}`);

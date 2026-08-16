@@ -5,14 +5,8 @@ import { getGridOrdersByDeal } from '../../src/storage/gridOrderRepository.js';
 import { getExitOrdersByDeal } from '../../src/storage/exitOrderRepository.js';
 import { adoptExistingPosition } from '../../src/orchestrator/adoptExistingPosition.js';
 import { buildConfig } from '../helpers/buildConfig.js';
-import type { ExchangeAdapter, MarketInfo, OpenOrder, Position } from '../../src/exchange/types.js';
-
-const market: MarketInfo = {
-  symbol: 'ETH/USDT:USDT',
-  tickSize: 0.01,
-  stepSize: 0.001,
-  minNotional: 5,
-};
+import { defaultMarket as market, position } from '../helpers/fixtures.js';
+import type { ExchangeAdapter, OpenOrder } from '../../src/exchange/types.js';
 
 function order(overrides: Partial<OpenOrder> = {}): OpenOrder {
   return {
@@ -28,17 +22,6 @@ function order(overrides: Partial<OpenOrder> = {}): OpenOrder {
   };
 }
 
-function pos(overrides: Partial<Position> = {}): Position {
-  return {
-    symbol: 'ETH/USDT:USDT',
-    side: 'long',
-    contracts: 0,
-    entryPrice: null,
-    liquidationPrice: null,
-    ...overrides,
-  };
-}
-
 function makeMockAdapter(overrides: Partial<ExchangeAdapter> = {}): ExchangeAdapter {
   return {
     setupSymbol: vi.fn().mockResolvedValue(undefined),
@@ -48,7 +31,7 @@ function makeMockAdapter(overrides: Partial<ExchangeAdapter> = {}): ExchangeAdap
       .mockResolvedValue([
         { openTime: 0, closeTime: 60_000, open: 2000, high: 2000, low: 2000, close: 2000 },
       ]),
-    fetchPosition: vi.fn().mockResolvedValue(pos()),
+    fetchPosition: vi.fn().mockResolvedValue(position()),
     createOrder: vi.fn().mockImplementation((params: { clientOrderId: string }) =>
       Promise.resolve({
         id: `ex-${params.clientOrderId}`,
@@ -88,7 +71,7 @@ describe('adoptExistingPosition — declining to adopt', () => {
     const db = openDatabase();
     const config = buildConfig({ include_existing_position: true });
     const adapter = makeMockAdapter({
-      fetchPosition: vi.fn().mockResolvedValue(pos({ contracts: 0 })),
+      fetchPosition: vi.fn().mockResolvedValue(position({ contracts: 0 })),
     });
 
     const result = await adoptExistingPosition({
@@ -115,9 +98,13 @@ describe('adoptExistingPosition — minimal adoption (MVP §9: TP/SL only, no re
 
     const fetchPosition = vi
       .fn()
-      .mockResolvedValueOnce(pos({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 1000 }))
-      .mockResolvedValueOnce(pos({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 1000 }))
-      .mockResolvedValue(pos({ contracts: 0, entryPrice: null }));
+      .mockResolvedValueOnce(
+        position({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 1000 }),
+      )
+      .mockResolvedValueOnce(
+        position({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 1000 }),
+      )
+      .mockResolvedValue(position({ contracts: 0, entryPrice: null }));
 
     const fetchOpenOrders = vi
       .fn()
@@ -185,9 +172,13 @@ describe('adoptExistingPosition — minimal adoption (MVP §9: TP/SL only, no re
       ]);
     const fetchPosition = vi
       .fn()
-      .mockResolvedValueOnce(pos({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 1000 }))
-      .mockResolvedValueOnce(pos({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 1000 }))
-      .mockResolvedValue(pos({ contracts: 0, entryPrice: null }));
+      .mockResolvedValueOnce(
+        position({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 1000 }),
+      )
+      .mockResolvedValueOnce(
+        position({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 1000 }),
+      )
+      .mockResolvedValue(position({ contracts: 0, entryPrice: null }));
 
     const adapter = makeMockAdapter({ fetchPosition, fetchOpenOrders });
     let t = 1000;

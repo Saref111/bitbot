@@ -1,12 +1,7 @@
 import pino from 'pino';
 import type { Logger } from 'pino';
-
+import { CreateLoggerOptions } from './types.js';
 export type { Logger } from 'pino';
-
-export interface CreateLoggerOptions {
-  level?: string;
-  logFilePath?: string;
-}
 
 /**
  * MVP §13.6: TRACE/DEBUG/INFO/WARN/ERROR — pino's own level set covers all

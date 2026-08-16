@@ -1,4 +1,4 @@
-import type { OpenOrder, Position } from '../exchange/types.js';
+import type { OpenOrder, Position } from '../exchange/index.js';
 
 export interface PlacedGridOrderSnapshot {
   clientOrderId: string;

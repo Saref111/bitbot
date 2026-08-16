@@ -1,7 +1,5 @@
 import { z } from 'zod';
-
-// MVP §13.1: supported filter timeframes cap at 1h (4h+ not implemented yet).
-export const supportedTimeframes = ['1m', '5m', '15m', '30m', '1h'] as const;
+import { supportedTimeframes } from '../candles/index.js';
 
 export const entryFilterSchema = z.object({
   // Intentionally free-form: more indicators are meant to be added later (MVP §3).

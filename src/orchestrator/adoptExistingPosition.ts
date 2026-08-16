@@ -1,17 +1,15 @@
-import { insertDeal, updateDeal } from '../storage/dealRepository.js';
-import { insertGridOrders, updateGridOrderStatus } from '../storage/gridOrderRepository.js';
-import { insertExitOrder } from '../storage/exitOrderRepository.js';
-import { insertConfigSnapshot } from '../storage/configSnapshotRepository.js';
-import { runInTransaction } from '../storage/transaction.js';
-import { decide } from '../strategy/decide.js';
+import {
+  insertConfigSnapshot,
+  insertDeal,
+  insertExitOrder,
+  insertGridOrders,
+  runInTransaction,
+  updateDeal,
+  updateGridOrderStatus,
+} from '../storage/index.js';
+import { decide } from '../strategy/index.js';
 import { runDealLoop } from './runDeal.js';
-import type { RunDealOptions, RunDealResult } from './runDeal.js';
-import type { OrchestratorContext } from './types.js';
-
-export interface AdoptExistingPositionParams extends OrchestratorContext {
-  dealId: string;
-  options?: RunDealOptions;
-}
+import type { AdoptExistingPositionParams, RunDealResult } from './types.js';
 
 /**
  * MVP §9: if include_existing_position is true and the exchange already has

@@ -1,4 +1,4 @@
-import type { Config } from '../config/types.js';
+import type { Config } from '../config/index.js';
 import type { GridPlan, GridRung } from './types.js';
 
 /**

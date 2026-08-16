@@ -1,21 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { ExitOrderRow, ExitOrderStatus, ExitOrderType } from './types.js';
-
-export interface NewExitOrder {
-  dealId: string;
-  type: ExitOrderType;
-  clientOrderId: string;
-  price: number;
-  amount: number;
-  createdAt: number;
-}
-
-export interface ExitOrderPatch {
-  status: ExitOrderStatus;
-  filledAt?: number;
-  cancelledAt?: number;
-  filledSize?: number;
-}
+import type {
+  ExitOrderPatch,
+  ExitOrderRow,
+  ExitOrderStatus,
+  ExitOrderType,
+  NewExitOrder,
+} from './types.js';
 
 function mapRow(row: Record<string, unknown>): ExitOrderRow {
   return {

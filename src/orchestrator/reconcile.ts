@@ -1,3 +1,4 @@
+import { EPS } from './constants.js';
 import type {
   ReconcileEvent,
   ReconcileTickInput,
@@ -5,12 +6,10 @@ import type {
   PlacedGridOrderSnapshot,
 } from './reconcileTypes.js';
 
-const EPS = 1e-9;
-
 /**
  * MVP §5/§9: classifies what happened to resting grid/exit orders between
- * two polls, using only fetchOpenOrders (with .filled — Slice 5) and
- * fetchPosition — no new read method needed.
+ * two polls, using only fetchOpenOrders (with .filled) and fetchPosition —
+ * no new read method needed.
  *
  * Core invariant: every unit of size is either DIRECTLY observed (a
  * still-open order's .filled increased — a PartialFill, never guessed) or

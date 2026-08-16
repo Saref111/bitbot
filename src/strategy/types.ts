@@ -1,12 +1,12 @@
-import type { Config } from '../config/types.js';
+import type { Config } from '../config/index.js';
 
 /**
  * decide() only covers an in-flight deal's fill lifecycle (MVP §5, ACTIVE
  * state). Deliberately NOT its job — owned by the orchestrator instead:
- *  - entry filters / WAITING_SIGNAL → GRID_PLACED (Slice 4 filters, Slice 8 wiring)
+ *  - entry filters / WAITING_SIGNAL → GRID_PLACED
  *  - runaway-cancel in GRID_PLACED (price-driven, lives in the orchestrator)
- *  - partial_placement rung delivery bookkeeping (Slice 9)
- *  - liquidation / HALTED (orchestrator, Slice 9)
+ *  - partial_placement rung delivery bookkeeping
+ *  - liquidation / HALTED
  */
 export interface DecideContext {
   config: Config;

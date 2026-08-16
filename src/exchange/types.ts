@@ -1,11 +1,20 @@
-import type { Candle, Timeframe } from '../candles/types.js';
+import type {
+  Market,
+  Order,
+  OHLCV,
+  Position as CcxtPosition,
+  FundingRate as CcxtFundingRate,
+  Trade as CcxtTrade,
+  FundingHistory as CcxtFundingHistory,
+  pro,
+} from 'ccxt';
+import type { Candle, Timeframe } from '../candles/index.js';
 
-/**
- * Thrown by ExchangeAdapter.cancelOrder when the order is already gone
- * (filled or otherwise resolved) rather than still cancellable — Slice 9's
- * TP/SL reprice treats this as "it just filled," not a real failure.
- */
-export class OrderNotFoundError extends Error {}
+export interface ExchangeCredentials {
+  apiKey: string;
+  apiSecret: string;
+  testnet: boolean;
+}
 
 export interface MarketInfo {
   symbol: string;
@@ -63,7 +72,7 @@ export interface TradeInfo {
   amount: number;
   cost: number;
   feeCost: number;
-  /** Currency the fee was charged in — Slice 10's computeNet checks this against the symbol's quote currency before summing. */
+  /** Currency the fee was charged in — computeNet checks this against the symbol's quote currency before summing. */
   feeCurrency: string;
   takerOrMaker: 'taker' | 'maker' | 'unknown';
 }
@@ -92,8 +101,8 @@ export interface ExchangeAdapter {
   fetchOpenOrders: (symbol: string) => Promise<OpenOrder[]>;
   /**
    * Cancels ONE specific resting order by clientOrderId, unlike cancelAll —
-   * needed for TP/SL reprice (Slice 9), which must not disturb the other
-   * still-live grid rungs on the same symbol.
+   * needed for TP/SL reprice, which must not disturb the other still-live
+   * grid rungs on the same symbol.
    */
   cancelOrder: (symbol: string, clientOrderId: string) => Promise<void>;
   cancelAll: (symbol: string) => Promise<void>;
@@ -103,3 +112,64 @@ export interface ExchangeAdapter {
   /** MVP §13.4 (NET): funding payments since `since`, no upper bound. */
   fetchFundingHistory: (symbol: string, since: number) => Promise<FundingPayment[]>;
 }
+
+export interface FillWatcher {
+  /** Resolves on the next order-related WS update for `symbol`; rejects if the underlying watch call fails. */
+  next(symbol: string): Promise<void>;
+}
+
+export interface ReadyRung {
+  index: number;
+  price: number;
+  size: number;
+  notionalUsdt: number;
+  clientOrderId: string;
+}
+
+export type GridReadyResult =
+  { ok: true; rungs: ReadyRung[] } | { ok: false; reason: string; rungIndex: number };
+
+/**
+ * Narrow slice of ccxt's Exchange surface that binanceAdapter.ts actually
+ * calls — lets unit tests supply a plain mock instead of satisfying ccxt's
+ * full (huge) Exchange class shape. A real ccxt.binanceusdm instance
+ * structurally satisfies this already (see binanceClient.ts).
+ */
+export interface CcxtLike {
+  loadMarkets: (reload?: boolean) => Promise<unknown>;
+  setPositionMode: (hedged: boolean, symbol?: string) => Promise<unknown>;
+  setMarginMode: (marginMode: string, symbol?: string) => Promise<unknown>;
+  setLeverage: (leverage: number, symbol?: string) => Promise<unknown>;
+  market: (symbol: string) => Market;
+  fetchOHLCV: (
+    symbol: string,
+    timeframe?: string,
+    since?: number,
+    limit?: number,
+  ) => Promise<OHLCV[]>;
+  fetchPositions: (symbols?: string[]) => Promise<CcxtPosition[]>;
+  createOrder: (
+    symbol: string,
+    type: string,
+    side: string,
+    amount: number,
+    price?: number,
+    params?: Record<string, unknown>,
+  ) => Promise<Order>;
+  fetchOpenOrders: (symbol?: string) => Promise<Order[]>;
+  cancelOrder: (id: string, symbol?: string, params?: Record<string, unknown>) => Promise<Order>;
+  cancelAllOrders: (symbol?: string) => Promise<Order[]>;
+  fetchFundingRate: (symbol: string) => Promise<CcxtFundingRate>;
+  fetchMyTrades: (symbol?: string, since?: number, limit?: number) => Promise<CcxtTrade[]>;
+  fetchFundingHistory: (
+    symbol?: string,
+    since?: number,
+    limit?: number,
+  ) => Promise<CcxtFundingHistory[]>;
+}
+
+export interface WatchOrdersLike {
+  watchOrders: (symbol: string) => Promise<unknown>;
+}
+
+export type BinanceProClient = InstanceType<(typeof pro)['binanceusdm']>;

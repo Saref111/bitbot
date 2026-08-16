@@ -1,21 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { GridOrderRow, GridOrderStatus } from './types.js';
-
-export interface NewGridOrder {
-  rungIndex: number;
-  price: number;
-  size: number;
-  clientOrderId: string;
-}
-
-export interface GridOrderPatch {
-  status: GridOrderStatus;
-  placedAt?: number;
-  filledAt?: number;
-  cancelledAt?: number;
-  fillPrice?: number;
-  filledSize?: number;
-}
+import type { GridOrderPatch, GridOrderRow, GridOrderStatus, NewGridOrder } from './types.js';
 
 function mapRow(row: Record<string, unknown>): GridOrderRow {
   return {

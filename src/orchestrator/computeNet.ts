@@ -1,13 +1,7 @@
-import { createNoopLogger } from '../logging/logger.js';
-import type { ExchangeAdapter } from '../exchange/types.js';
-import type { Logger } from '../logging/logger.js';
-
-export interface NetBreakdown {
-  grossProfit: number;
-  totalFees: number;
-  totalFunding: number;
-  netProfit: number;
-}
+import { createNoopLogger } from '../logging/index.js';
+import type { ExchangeAdapter } from '../exchange/index.js';
+import type { Logger } from '../logging/index.js';
+import type { NetBreakdown } from './types.js';
 
 /** `ETH/USDT:USDT` -> `USDT`. USDM perps only (MVP scope) — always a `<base>/<quote>:<settle>` symbol. */
 function parseQuoteCurrency(symbol: string): string {
@@ -21,11 +15,11 @@ function parseQuoteCurrency(symbol: string): string {
 
 /**
  * MVP §7, §13.4: NET = gross profit - fees (both legs) + funding, over a
- * deal's whole lifetime. Deliberately no upper time bound — see the Slice
- * 10 review record: bounding to a captured `closedAt` risked excluding the
- * exit trade itself (its exchange timestamp can land a beat after the tick
- * that detected the fill), which is the single largest fee of the deal.
- * Safe to sum everything from `since` onward specifically because MVP scope
+ * deal's whole lifetime. Deliberately no upper time bound: bounding to a
+ * captured `closedAt` risked excluding the exit trade itself (its exchange
+ * timestamp can land a beat after the tick that detected the fill), which
+ * is the single largest fee of the deal. Safe to sum everything from
+ * `since` onward specifically because MVP scope
  * guarantees one deal at a time AND this is always called synchronously as
  * part of closing THIS deal, before any next deal could possibly exist.
  *

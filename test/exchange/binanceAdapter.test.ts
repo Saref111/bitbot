@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OrderNotFound } from 'ccxt';
 import { createBinanceAdapter } from '../../src/exchange/binanceAdapter.js';
-import { OrderNotFoundError } from '../../src/exchange/types.js';
-import type { CcxtLike } from '../../src/exchange/binanceAdapter.js';
+import { OrderNotFoundError } from '../../src/exchange/errors.js';
+import type { CcxtLike } from '../../src/exchange/types.js';
 
 function makeMockClient(overrides: Partial<CcxtLike> = {}): CcxtLike {
   return {
