@@ -947,3 +947,76 @@ describe('runDeal — WS fill-watch as a wake-up trigger (MVP §13.5)', () => {
     );
   });
 });
+
+describe('runDealLoop — graceful shutdown (AbortSignal)', () => {
+  function seedRestingGridPlacedDeal(db: ReturnType<typeof openDatabase>): void {
+    insertDeal(db, {
+      id: 'deal-1',
+      status: 'GRID_PLACED',
+      direction: 'long',
+      depositUsdt: 200,
+      openedAt: 900,
+    });
+    updateDeal(db, 'deal-1', { pEntry: 2000 });
+    insertGridOrders(
+      db,
+      'deal-1',
+      [{ rungIndex: 1, price: 1996, size: 0.15, clientOrderId: 'deal-1-1' }],
+      900,
+    );
+    updateGridOrderStatus(db, 'deal-1-1', { status: 'placed', placedAt: 900 });
+  }
+
+  it('finishes the in-flight tick, then stops before starting a next one', async () => {
+    const db = openDatabase();
+    seedRestingGridPlacedDeal(db);
+
+    const controller = new AbortController();
+    // Shutdown requested WHILE this (first) tick's own exchange calls are in
+    // flight — must not be interrupted; the tick completes normally (rung
+    // still resting, nothing happened) before the loop notices the signal.
+    const fetchOpenOrders = vi.fn().mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve([order({ clientOrderId: 'deal-1-1' })]);
+    });
+    const adapter = makeMockAdapter({ fetchOpenOrders });
+
+    const result = await runDealLoop({
+      adapter,
+      db,
+      config: twoRungConfig(),
+      now: () => 1000,
+      dealId: 'deal-1',
+      options: { pollIntervalMs: 50, signal: controller.signal },
+    });
+
+    expect(result).toEqual({ outcome: 'shutdown' });
+    expect(fetchOpenOrders).toHaveBeenCalledTimes(1);
+  });
+
+  it('reacts promptly once aborted between ticks, without waiting out the full poll interval', async () => {
+    const db = openDatabase();
+    seedRestingGridPlacedDeal(db);
+
+    const controller = new AbortController();
+    const adapter = makeMockAdapter({
+      fetchOpenOrders: vi.fn().mockResolvedValue([order({ clientOrderId: 'deal-1-1' })]),
+    });
+
+    const resultPromise = runDealLoop({
+      adapter,
+      db,
+      config: twoRungConfig(),
+      now: () => 1000,
+      dealId: 'deal-1',
+      // A poll interval this long would time the test out if the abort
+      // race arm didn't win — proves the reaction is prompt, not just eventual.
+      options: { pollIntervalMs: 60_000, signal: controller.signal },
+    });
+
+    await sleep(5);
+    controller.abort();
+
+    await expect(resultPromise).resolves.toEqual({ outcome: 'shutdown' });
+  });
+});

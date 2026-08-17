@@ -1,4 +1,4 @@
-import { sleep } from '../util/index.js';
+import { sleep, waitForAbort } from '../util/index.js';
 import { createSignalEngine, ingestOneMinuteCandle } from './signalEngine.js';
 import type { EntrySignal, WatchForEntryParams } from './types.js';
 
@@ -19,9 +19,13 @@ import type { EntrySignal, WatchForEntryParams } from './types.js';
  * skipped (not fed in, not marked as seen) and picked up again, now closed,
  * on a later poll. A websocket kline stream (the `k.x` "bar closed" flag)
  * would carry this natively; this guard covers the poll-only path used here.
+ *
+ * Resolves `null` instead of an EntrySignal if `signal` fires before entry
+ * does — graceful shutdown, not an error. Checked only between polls, never
+ * mid-fetchOHLCV, same discipline as runDealLoop's shutdown check.
  */
-export async function watchForEntry(params: WatchForEntryParams): Promise<EntrySignal> {
-  const { adapter, config } = params;
+export async function watchForEntry(params: WatchForEntryParams): Promise<EntrySignal | null> {
+  const { adapter, config, signal } = params;
   const warmupCandles = params.warmupCandles ?? 200;
   const pollIntervalMs = params.pollIntervalMs ?? 60_000;
   const now = params.now ?? Date.now;
@@ -37,6 +41,8 @@ export async function watchForEntry(params: WatchForEntryParams): Promise<EntryS
   }
 
   for (;;) {
+    if (signal?.aborted) return null;
+
     const candles = await adapter.fetchOHLCV(config.symbol, '1m', undefined, 5);
     for (const candle of candles) {
       if (lastOpenTime !== undefined && candle.openTime <= lastOpenTime) continue;
@@ -46,6 +52,9 @@ export async function watchForEntry(params: WatchForEntryParams): Promise<EntryS
       lastOpenTime = candle.openTime;
       if (result.entrySignal) return result.entrySignal;
     }
-    await sleep(pollIntervalMs);
+
+    const waitArms: Promise<void>[] = [sleep(pollIntervalMs)];
+    if (signal) waitArms.push(waitForAbort(signal));
+    await Promise.race(waitArms);
   }
 }

@@ -5,3 +5,4 @@ dist
 *.log
 docs/
 *.md
+!README.md

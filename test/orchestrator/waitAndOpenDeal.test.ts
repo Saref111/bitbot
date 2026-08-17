@@ -144,3 +144,42 @@ describe('waitAndOpenDeal — the bot enters exactly when filters align (MVP §5
     );
   });
 });
+
+describe('waitAndOpenDeal — graceful shutdown (AbortSignal)', () => {
+  it('returns shutdown, never calls runDeal, when aborted before entry_filters ever align', async () => {
+    const config = buildConfig({ entry_filters: [] });
+    const controller = new AbortController();
+    controller.abort();
+
+    const createOrder = vi.fn();
+    const adapter: ExchangeAdapter = {
+      setupSymbol: vi.fn().mockResolvedValue(undefined),
+      getMarketInfo: vi.fn().mockResolvedValue(market),
+      fetchOHLCV: vi.fn().mockResolvedValue([candle(0, 100)]),
+      fetchPosition: vi.fn(),
+      createOrder,
+      fetchOpenOrders: vi.fn().mockResolvedValue([]),
+      cancelOrder: vi.fn().mockResolvedValue(undefined),
+      cancelAll: vi.fn().mockResolvedValue(undefined),
+      fetchFundingRate: vi.fn(),
+      fetchTrades: vi.fn().mockResolvedValue([]),
+      fetchFundingHistory: vi.fn().mockResolvedValue([]),
+    };
+
+    const db = openDatabase();
+    const result = await waitAndOpenDeal({
+      adapter,
+      db,
+      config,
+      now: () => 1000,
+      dealId: 'deal-1',
+      warmupCandles: 1,
+      feedPollIntervalMs: 1,
+      signal: controller.signal,
+    });
+
+    expect(result).toEqual({ outcome: 'shutdown' });
+    expect(createOrder).not.toHaveBeenCalled();
+    expect(getDeal(db, 'deal-1')).toBeNull(); // no deal ever started
+  });
+});

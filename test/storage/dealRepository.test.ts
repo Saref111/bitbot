@@ -3,6 +3,7 @@ import { openDatabase } from '../../src/storage/db.js';
 import {
   getDeal,
   getMostRecentClosedDeal,
+  getMostRecentOpenDeal,
   insertDeal,
   updateDeal,
 } from '../../src/storage/dealRepository.js';
@@ -191,5 +192,72 @@ describe('getMostRecentClosedDeal', () => {
     });
     updateDeal(db, 'deal-1', { status: 'HALTED', closeReason: 'error', closedAt: 3000 });
     expect(getMostRecentClosedDeal(db)?.status).toBe('HALTED');
+  });
+});
+
+describe('getMostRecentOpenDeal', () => {
+  it('returns null when the db has no deals at all', () => {
+    const db = openDatabase();
+    expect(getMostRecentOpenDeal(db)).toBeNull();
+  });
+
+  it('returns null when the only deal already closed', () => {
+    const db = openDatabase();
+    insertDeal(db, {
+      id: 'deal-1',
+      status: 'ACTIVE',
+      direction: 'long',
+      depositUsdt: 200,
+      openedAt: 1000,
+    });
+    updateDeal(db, 'deal-1', { status: 'SETTLING', closeReason: 'tp', closedAt: 5000 });
+    expect(getMostRecentOpenDeal(db)).toBeNull();
+  });
+
+  it.each(['WAITING_SIGNAL', 'GRID_PLACED', 'ACTIVE'] as const)(
+    'finds a deal stuck in %s (closedAt still null)',
+    (status) => {
+      const db = openDatabase();
+      insertDeal(db, {
+        id: 'deal-1',
+        status,
+        direction: 'long',
+        depositUsdt: 200,
+        openedAt: 1000,
+      });
+      expect(getMostRecentOpenDeal(db)?.id).toBe('deal-1');
+    },
+  );
+
+  it('excludes HALTED deals — they are terminal too, just not resumable automatically', () => {
+    const db = openDatabase();
+    insertDeal(db, {
+      id: 'deal-1',
+      status: 'ACTIVE',
+      direction: 'long',
+      depositUsdt: 200,
+      openedAt: 1000,
+    });
+    updateDeal(db, 'deal-1', { status: 'HALTED', closeReason: 'error', closedAt: 3000 });
+    expect(getMostRecentOpenDeal(db)).toBeNull();
+  });
+
+  it('picks the most recently opened deal when (in principle) more than one is open', () => {
+    const db = openDatabase();
+    insertDeal(db, {
+      id: 'deal-older',
+      status: 'GRID_PLACED',
+      direction: 'long',
+      depositUsdt: 200,
+      openedAt: 1000,
+    });
+    insertDeal(db, {
+      id: 'deal-newer',
+      status: 'ACTIVE',
+      direction: 'long',
+      depositUsdt: 210,
+      openedAt: 2000,
+    });
+    expect(getMostRecentOpenDeal(db)?.id).toBe('deal-newer');
   });
 });

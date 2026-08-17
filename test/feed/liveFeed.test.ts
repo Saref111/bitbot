@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { watchForEntry } from '../../src/feed/liveFeed.js';
 import { requireAt } from '../../src/util/arrays.js';
+import { sleep } from '../../src/util/time.js';
 import { buildConfig } from '../helpers/buildConfig.js';
 import { candle, defaultMarket as market } from '../helpers/fixtures.js';
 import type { ExchangeAdapter } from '../../src/exchange/types.js';
@@ -69,7 +70,7 @@ describe('watchForEntry — empty filters (MVP §3: enter immediately)', () => {
     // Entry fires on the very first new candle (alreadySeen, index 1) since
     // filters are empty — this test's real point is exercised by the dedup
     // test below with a non-empty filter that can't trigger on candle 1.
-    expect(signal.price).toBe(101);
+    expect(signal?.price).toBe(101);
   });
 });
 
@@ -115,7 +116,7 @@ describe('watchForEntry — does not treat a still-forming bar as closed (MVP §
       now,
     });
 
-    expect(signal.price).toBe(101); // the closed read, never the forming one's 999
+    expect(signal?.price).toBe(101); // the closed read, never the forming one's 999
     expect(fetchOHLCV).toHaveBeenCalledTimes(3); // warm-up + skipped poll + the poll that found it closed
   });
 });
@@ -152,7 +153,57 @@ describe('watchForEntry — dedup across polls with a real filter', () => {
 
     // period=1 RSI needs only 2 closes, so it's already computable at c1;
     // op '>' -1 is always true, so entry should fire at c1, not later.
-    expect(signal.price).toBe(101);
+    expect(signal?.price).toBe(101);
     expect(fetchOHLCV).toHaveBeenCalledTimes(2); // warm-up + the single poll that found c1
+  });
+});
+
+describe('watchForEntry — graceful shutdown (AbortSignal)', () => {
+  it('resolves null instead of waiting forever when aborted before entry fires', async () => {
+    const config = buildConfig({ entry_filters: [] });
+    const warmup = [candle(0, 100)];
+    const controller = new AbortController();
+
+    // Never actually signals entry (empty poll every time) — without the
+    // abort, this would loop forever.
+    const fetchOHLCV = vi.fn().mockResolvedValueOnce(warmup).mockResolvedValue([]);
+    const adapter = makeAdapter(fetchOHLCV);
+
+    const signalPromise = watchForEntry({
+      adapter,
+      config,
+      warmupCandles: 1,
+      pollIntervalMs: 60_000, // long enough that only the abort race arm can win promptly
+      signal: controller.signal,
+    });
+
+    await sleep(5);
+    controller.abort();
+
+    await expect(signalPromise).resolves.toBeNull();
+  });
+
+  it('never calls fetchOHLCV again once already aborted', async () => {
+    const config = buildConfig({ entry_filters: [] });
+    const warmup = [candle(0, 100)];
+    const controller = new AbortController();
+    controller.abort(); // aborted before watchForEntry is even called
+
+    const fetchOHLCV = vi
+      .fn()
+      .mockResolvedValueOnce(warmup)
+      .mockResolvedValue([candle(1, 101)]);
+    const adapter = makeAdapter(fetchOHLCV);
+
+    const signal = await watchForEntry({
+      adapter,
+      config,
+      warmupCandles: 1,
+      pollIntervalMs: 1,
+      signal: controller.signal,
+    });
+
+    expect(signal).toBeNull();
+    expect(fetchOHLCV).toHaveBeenCalledTimes(1); // only the warm-up fetch, no poll
   });
 });
