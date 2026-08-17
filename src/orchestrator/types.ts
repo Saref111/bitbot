@@ -25,7 +25,8 @@ import type {
 //     grid/ shape as input, not a generic helper stranded in the wrong
 //     module)
 //   feed                                   — depends on util/exchange/config/candles/indicators/filters
-//   orchestrator                           — top; depends on all of the above
+//   orchestrator                           — depends on all of the above
+//   main.ts (src/, not a directory)        — top; depends only on orchestrator/
 
 export interface OrchestratorContext {
   adapter: ExchangeAdapter;
@@ -56,6 +57,13 @@ export interface RunDealOptions {
    * regardless of what woke it up.
    */
   fillWatcher?: FillWatcher;
+  /**
+   * Graceful shutdown (main.ts's SIGINT/SIGTERM handling). Checked only
+   * between ticks, never mid-exchange-call: a tick already in flight always
+   * finishes normally. Omitted (as in every test that doesn't set it), the
+   * loop behaves exactly as before, running until a normal terminal result.
+   */
+  signal?: AbortSignal;
 }
 
 export interface RunDealParams extends OrchestratorContext {
@@ -68,7 +76,9 @@ export interface RunDealParams extends OrchestratorContext {
 export type RunDealResult =
   | { outcome: 'closed'; closeReason: DealCloseReason }
   | { outcome: 'runaway' }
-  | { outcome: 'halted'; reason: string };
+  | { outcome: 'halted'; reason: string }
+  /** Graceful shutdown, not an error — resumes normally via recoverDeal on the next start. */
+  | { outcome: 'shutdown' };
 
 export type RecoverDealResult = RunDealResult | { outcome: 'no-deal' };
 
@@ -124,6 +134,10 @@ export interface WaitAndOpenDealParams extends OrchestratorContext {
   feedPollIntervalMs?: number;
   dealPollIntervalMs?: number;
   haltConfirmationTicks?: number;
+  /** MVP §13.5 — passed straight through to runDeal's RunDealOptions once the deal opens. */
+  fillWatcher?: FillWatcher;
+  /** Graceful shutdown — checked both while waiting for entry_filters and, once open, on every runDeal tick. */
+  signal?: AbortSignal;
 }
 
 export interface NetBreakdown {

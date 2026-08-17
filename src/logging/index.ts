@@ -1,1 +1,1 @@
-export { createNoopLogger, type Logger } from './logger.js';
+export { createNoopLogger, createLogger, type Logger } from './logger.js';

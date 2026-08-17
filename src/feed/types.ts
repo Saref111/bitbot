@@ -22,6 +22,8 @@ export interface WatchForEntryParams {
   pollIntervalMs?: number;
   /** Injectable clock, defaults to Date.now — see the still-forming-bar guard below. */
   now?: () => number;
+  /** Graceful shutdown — checked between polls; watchForEntry resolves with null instead of an EntrySignal if aborted before one fires. */
+  signal?: AbortSignal;
 }
 
 export type IndicatorComputer = (filter: EntryFilter, candles: readonly Candle[]) => number | null;

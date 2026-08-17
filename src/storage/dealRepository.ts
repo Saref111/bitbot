@@ -55,3 +55,11 @@ export function getMostRecentClosedDeal(db: DatabaseSync): DealRow | null {
     .get();
   return row ? mapRow(row) : null;
 }
+
+/** MVP §5 (restart bullet): a deal not yet in a terminal state (closedAt still null) — main.ts hands this to recoverDeal on startup instead of starting a fresh one. */
+export function getMostRecentOpenDeal(db: DatabaseSync): DealRow | null {
+  const row = db
+    .prepare('SELECT * FROM deal WHERE closed_at IS NULL ORDER BY opened_at DESC LIMIT 1')
+    .get();
+  return row ? mapRow(row) : null;
+}

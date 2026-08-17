@@ -14,7 +14,7 @@ import { deliverNextRungs } from './deliverRungs.js';
 import { resolveDepositUsdt } from './resolveDeposit.js';
 import { createNoopLogger } from '../logging/index.js';
 import { createNoopNotifier } from '../notify/index.js';
-import { sleep } from '../util/index.js';
+import { sleep, waitForAbort } from '../util/index.js';
 import type { Logger } from '../logging/index.js';
 import type { FillWatcher } from '../exchange/index.js';
 import type {
@@ -72,12 +72,18 @@ export async function runDealLoop(
   const pollIntervalMs = ctx.options?.pollIntervalMs ?? 500;
   const haltConfirmationTicks = ctx.options?.haltConfirmationTicks ?? 2;
   const fillWatcher = ctx.options?.fillWatcher;
+  const signal = ctx.options?.signal;
   const gate: HaltGateState = { lastSignature: null, streak: 0 };
   const logger = ctx.logger ?? createNoopLogger();
   const notifier = ctx.notifier ?? createNoopNotifier();
   const wsHealth = { healthy: true };
 
   for (;;) {
+    // Checked at the top, before any exchange call this iteration would
+    // make — an in-flight tick always finishes; shutdown only ever skips
+    // STARTING the next one.
+    if (signal?.aborted) return { outcome: 'shutdown' };
+
     const deal = getDeal(ctx.db, ctx.dealId);
     if (!deal) throw new Error(`runDeal: deal ${ctx.dealId} not found`);
 
@@ -100,14 +106,18 @@ export async function runDealLoop(
 
     if (result !== 'continue') return result;
 
+    // Races whichever wake-up arms are actually in play this run — plain
+    // interval always included, WS fast-path and shutdown signal only when
+    // the caller supplied them (every existing test that supplies neither
+    // behaves exactly as before, plain sleep(pollIntervalMs)).
+    const waitArms: Promise<void>[] = [sleep(pollIntervalMs)];
     if (fillWatcher) {
-      await Promise.race([
-        sleep(pollIntervalMs),
-        watchOrNeverThisRound(fillWatcher, ctx.config.symbol, logger, wsHealth),
-      ]);
-    } else {
-      await sleep(pollIntervalMs);
+      waitArms.push(watchOrNeverThisRound(fillWatcher, ctx.config.symbol, logger, wsHealth));
     }
+    if (signal) {
+      waitArms.push(waitForAbort(signal));
+    }
+    await Promise.race(waitArms);
   }
 }
 

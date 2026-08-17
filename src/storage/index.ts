@@ -1,4 +1,10 @@
-export { insertDeal, updateDeal, getMostRecentClosedDeal, getDeal } from './dealRepository.js';
+export {
+  insertDeal,
+  updateDeal,
+  getMostRecentClosedDeal,
+  getMostRecentOpenDeal,
+  getDeal,
+} from './dealRepository.js';
 export { restoreDeal } from './restoreDeal.js';
 export { appendEvent } from './eventLogRepository.js';
 export {
@@ -14,6 +20,7 @@ export {
 export { insertConfigSnapshot } from './configSnapshotRepository.js';
 export { placeGrid } from './placeGrid.js';
 export { runInTransaction } from './transaction.js';
+export { openDatabase } from './db.js';
 export type {
   ExitOrderRow,
   NewExitOrder,

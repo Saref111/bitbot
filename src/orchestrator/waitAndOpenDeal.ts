@@ -9,7 +9,7 @@ import type { RunDealResult, WaitAndOpenDealParams } from './types.js';
  * the signal, it doesn't act on it.
  */
 export async function waitAndOpenDeal(params: WaitAndOpenDealParams): Promise<RunDealResult> {
-  const signal = await watchForEntry({
+  const entrySignal = await watchForEntry({
     adapter: params.adapter,
     config: params.config,
     now: params.now,
@@ -17,7 +17,10 @@ export async function waitAndOpenDeal(params: WaitAndOpenDealParams): Promise<Ru
     ...(params.feedPollIntervalMs !== undefined
       ? { pollIntervalMs: params.feedPollIntervalMs }
       : {}),
+    ...(params.signal !== undefined ? { signal: params.signal } : {}),
   });
+
+  if (entrySignal === null) return { outcome: 'shutdown' };
 
   return runDeal({
     adapter: params.adapter,
@@ -25,7 +28,7 @@ export async function waitAndOpenDeal(params: WaitAndOpenDealParams): Promise<Ru
     config: params.config,
     now: params.now,
     dealId: params.dealId,
-    entryPrice: signal.price,
+    entryPrice: entrySignal.price,
     options: {
       ...(params.dealPollIntervalMs !== undefined
         ? { pollIntervalMs: params.dealPollIntervalMs }
@@ -33,6 +36,8 @@ export async function waitAndOpenDeal(params: WaitAndOpenDealParams): Promise<Ru
       ...(params.haltConfirmationTicks !== undefined
         ? { haltConfirmationTicks: params.haltConfirmationTicks }
         : {}),
+      ...(params.fillWatcher !== undefined ? { fillWatcher: params.fillWatcher } : {}),
+      ...(params.signal !== undefined ? { signal: params.signal } : {}),
     },
     ...(params.logger !== undefined ? { logger: params.logger } : {}),
     ...(params.notifier !== undefined ? { notifier: params.notifier } : {}),

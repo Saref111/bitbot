@@ -6,13 +6,18 @@
   "engines": {
     "node": ">=24"
   },
+  "bin": {
+    "bitbot": "./dist/src/bin/bitbot.js"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc && chmod +x dist/src/bin/bitbot.js",
+    "start": "npm run build && node dist/src/bin/bitbot.js"
   },
   "dependencies": {
     "ccxt": "^4.5.73",
