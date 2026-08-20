@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { supportedTimeframes } from '../candles/index.js';
+import { logLevels } from '../logging/index.js';
 
 export const entryFilterSchema = z.object({
   // Intentionally free-form: more indicators are meant to be added later (MVP §3).
@@ -52,6 +53,10 @@ export const configSchema = z
     trailing_take: z.null(),
     stop_loss: z.number().positive().nullable(),
     halt_after_loss: z.boolean(),
+
+    // Operational, not strategy config — CLI --log-level and env LOG_LEVEL
+    // both take priority over this when set (see resolveLogLevel).
+    logging: z.object({ level: z.enum(logLevels).optional() }).optional(),
   })
   .refine(
     (config) =>

@@ -27,6 +27,30 @@ describe('parseArgs', () => {
       dbPath: 'state.db',
     });
   });
+
+  it('omits logLevel when --log-level is not given', () => {
+    expect(parseArgs(['--config', 'config.yaml'])).toEqual({
+      configPath: 'config.yaml',
+      dbPath: 'config.db',
+    });
+  });
+
+  it.each(['trace', 'debug', 'info', 'warn', 'error'])(
+    'accepts --log-level %s',
+    (logLevel) => {
+      expect(parseArgs(['--config', 'config.yaml', '--log-level', logLevel])).toEqual({
+        configPath: 'config.yaml',
+        dbPath: 'config.db',
+        logLevel,
+      });
+    },
+  );
+
+  it('rejects an invalid --log-level with a clear, non-silent error', () => {
+    expect(() => parseArgs(['--config', 'config.yaml', '--log-level', 'garbage'])).toThrow(
+      /--log-level.*trace\|debug\|info\|warn\|error.*garbage/,
+    );
+  });
 });
 
 describe('deriveDefaultDbPath', () => {

@@ -7,19 +7,27 @@ import {
 } from './exchange/index.js';
 import { loadConfigFromFile } from './config/index.js';
 import { getMostRecentOpenDeal, openDatabase } from './storage/index.js';
-import { createLogger } from './logging/index.js';
+import { createLogger, createNoopLogger, resolveLogLevel } from './logging/index.js';
+import type { LogLevel } from './logging/index.js';
 import {
   createNoopNotifier,
   createTelegramNotifier,
   loadTelegramCredentials,
 } from './notify/index.js';
-import { adoptExistingPosition, recoverDeal, waitAndOpenDeal } from './orchestrator/index.js';
+import {
+  adoptExistingPosition,
+  announceSessionStart,
+  recoverDeal,
+  waitAndOpenDeal,
+} from './orchestrator/index.js';
 import type { FillWatcher } from './exchange/index.js';
 import type {
   OrchestratorContext,
   RecoverDealResult,
   RunDealResult,
 } from './orchestrator/index.js';
+
+export type Network = 'testnet' | 'mainnet';
 
 /**
  * Real bootstrap — file/env I/O, constructs real ccxt clients. Not unit
@@ -33,15 +41,22 @@ import type {
 export function buildOrchestratorContext(
   configPath: string,
   dbPath: string,
-): { ctx: OrchestratorContext; fillWatcher: FillWatcher } {
+  cliLogLevel?: LogLevel,
+): { ctx: OrchestratorContext; fillWatcher: FillWatcher; network: Network } {
   const config = loadConfigFromFile(configPath);
   const credentials = loadExchangeCredentials();
+  const network: Network = credentials.testnet ? 'testnet' : 'mainnet';
 
   const adapter = createBinanceAdapter(createBinanceCcxtClient(credentials));
   const fillWatcher = createBinanceFillWatcher(createBinanceProCcxtClient(credentials));
 
   const db = openDatabase(dbPath);
-  const logger = createLogger();
+  const level = resolveLogLevel({
+    ...(cliLogLevel !== undefined ? { cli: cliLogLevel } : {}),
+    ...(process.env.LOG_LEVEL !== undefined ? { env: process.env.LOG_LEVEL } : {}),
+    ...(config.logging?.level !== undefined ? { config: config.logging.level } : {}),
+  });
+  const logger = createLogger({ level });
 
   const telegramCredentials = loadTelegramCredentials();
   const notifier = telegramCredentials
@@ -56,6 +71,7 @@ export function buildOrchestratorContext(
   return {
     ctx: { adapter, db, config, now: () => Date.now(), logger, notifier },
     fillWatcher,
+    network,
   };
 }
 
@@ -79,13 +95,28 @@ function isStopOutcome(result: RunDealResult | RecoverDealResult): boolean {
  */
 export async function runBot(
   ctx: OrchestratorContext,
-  options: { signal?: AbortSignal; fillWatcher?: FillWatcher; generateDealId?: () => string } = {},
+  options: {
+    signal?: AbortSignal;
+    fillWatcher?: FillWatcher;
+    generateDealId?: () => string;
+    /** For the startup visibility banner (announceSessionStart) — defaults conservatively when omitted (test callers only). */
+    network?: Network;
+  } = {},
 ): Promise<void> {
   const generateDealId = options.generateDealId ?? defaultGenerateDealId;
   const dealOptions = {
     ...(options.signal !== undefined ? { signal: options.signal } : {}),
     ...(options.fillWatcher !== undefined ? { fillWatcher: options.fillWatcher } : {}),
   };
+
+  await announceSessionStart({
+    config: ctx.config,
+    db: ctx.db,
+    logger: ctx.logger ?? createNoopLogger(),
+    notifier: ctx.notifier ?? createNoopNotifier(),
+    network: options.network ?? 'testnet',
+    now: ctx.now,
+  });
 
   if (ctx.config.include_existing_position) {
     const result = await adoptExistingPosition({

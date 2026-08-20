@@ -290,4 +290,22 @@ describe('configSchema — invalid configs', () => {
     expect(result.success).toBe(false);
     expect(messages(result).join('\n')).toMatch(/stop_loss/);
   });
+
+  it('rejects an invalid logging.level', () => {
+    const config = { ...validConfig(), logging: { level: 'verbose' } };
+    const result = configSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    expect(messages(result).join('\n')).toMatch(/logging\.level/);
+  });
+});
+
+describe('configSchema — logging.level (optional)', () => {
+  it('accepts a config with no logging field at all', () => {
+    expect(configSchema.safeParse(validConfig()).success).toBe(true);
+  });
+
+  it.each(['trace', 'debug', 'info', 'warn', 'error'])('accepts logging.level: %s', (level) => {
+    const config = { ...validConfig(), logging: { level } };
+    expect(configSchema.safeParse(config).success).toBe(true);
+  });
 });
