@@ -35,6 +35,7 @@ BINANCE_TESTNET=true|false
 
 TELEGRAM_BOT_TOKEN=   # optional
 TELEGRAM_CHAT_ID=     # optional
+LOG_LEVEL=            # optional trace/debug/info/warn/error
 ```
 
 `BINANCE_TESTNET` is the actual switch between Binance's futures testnet and
@@ -79,7 +80,7 @@ briefly:
 ## Running
 
 ```bash
-npm start -- --config config.yaml [--db path/to/state.db] [--log-level debug]
+npm start -- --config config.yaml [--db path/to/state.db] [--log-level debug] [--log-file path/to/bot.log]
 ```
 
 - `--config <path>` — required, path to the strategy config YAML.
@@ -90,31 +91,43 @@ npm start -- --config config.yaml [--db path/to/state.db] [--log-level debug]
   silently falling back. The pino level used is the first of: this flag, the
   `LOG_LEVEL` environment variable, `logging.level` in `config.yaml`, then
   `info`.
+- `--log-file <path>` — optional, defaults to the config file's own path with
+  a `.log` extension (`config.yaml` → `config.log`, same directory). See
+  [Viewing logs](#viewing-logs) — this is the *base* name, not the literal
+  file that ends up on disk.
 
 `npm start` builds (`tsc`) and then runs the compiled entry point. To build
 once and run separately (e.g. for a systemd service):
 
 ```bash
 npm run build
-node dist/src/bin/bitbot.js --config config.yaml --log-level info
+node dist/src/bin/bitbot.js --config config.yaml [--db path/to/state.db] [--log-level debug] [--log-file path/to/bot.log]
 ```
 
 ### Viewing logs
 
-The bot always writes structured JSON (pino's default) to stdout — that's
-what ends up in the log file and is what other tooling (log aggregators,
-`grep`, `jq`) expects. For a human-readable view, pipe it through
-[`pino-pretty`](https://github.com/pinojs/pino-pretty) (a devDependency, run
-via `npx`) on read, never at write time:
+The bot logs to two destinations at once, in different formats:
+
+- **Console (stdout)** — pretty-printed via
+  [`pino-pretty`](https://github.com/pinojs/pino-pretty) automatically, no
+  flag or pipe needed. This is what you see running `npm start` directly;
+  it's for humans, not for parsing.
+- **File** — always-on, raw JSON Lines (one parseable object per line) via
+  [`pino-roll`](https://github.com/mcollina/pino-roll), rotated daily or at
+  20MB (whichever comes first), keeping the 14 most recent rotated files.
+  This is the machine-readable source — point `jq`, a log shipper, or
+  anything structured at the file, never at stdout.
+
+`pino-roll` always appends its own suffix to the base name you pass — the
+real file on disk is `bot.1.log`, or `bot.2026-08-20.1.log` once a
+date rotation has happened, **never** the literal `config.log`. Glob for it:
 
 ```bash
-npm start -- --config config.yaml --db test.db --log-level debug > bot.log 2>&1 &
-tail -f bot.log | npx pino-pretty
+tail -f bot*.log | npx pino-pretty   # prettify the JSON file on read, e.g. when the bot runs in the background
 ```
 
-Nothing in the app itself knows about `pino-pretty` — no flag, no config
-key. The file on disk stays raw JSON either way; prettifying is purely how
-you choose to read it.
+Nothing in the app itself knows about that pipe — it's just a convenience
+for reading the file form; the console is already pretty by default.
 
 ### What happens on startup
 

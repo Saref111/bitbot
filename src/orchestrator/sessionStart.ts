@@ -20,7 +20,7 @@ export interface AnnounceSessionStartParams {
  * Startup visibility (before watchForEntry, so it's the first thing a
  * human/log sees on a clean start): one structured INFO line, one
  * deal-less event_log row, one best-effort Telegram ping. MVP scope is
- * "Простий" only, so mode is a fixed literal, not something read from
+ * "Simple" mode only, so mode is a fixed literal, not something read from
  * config.
  */
 export async function announceSessionStart(params: AnnounceSessionStartParams): Promise<void> {

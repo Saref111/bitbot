@@ -42,6 +42,7 @@ export function buildOrchestratorContext(
   configPath: string,
   dbPath: string,
   cliLogLevel?: LogLevel,
+  logFilePath?: string,
 ): { ctx: OrchestratorContext; fillWatcher: FillWatcher; network: Network } {
   const config = loadConfigFromFile(configPath);
   const credentials = loadExchangeCredentials();
@@ -56,7 +57,7 @@ export function buildOrchestratorContext(
     ...(process.env.LOG_LEVEL !== undefined ? { env: process.env.LOG_LEVEL } : {}),
     ...(config.logging?.level !== undefined ? { config: config.logging.level } : {}),
   });
-  const logger = createLogger({ level });
+  const logger = createLogger({ level, ...(logFilePath !== undefined ? { logFilePath } : {}) });
 
   const telegramCredentials = loadTelegramCredentials();
   const notifier = telegramCredentials

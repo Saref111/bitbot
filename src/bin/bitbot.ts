@@ -8,13 +8,15 @@ import { announceSessionStop } from '../orchestrator/index.js';
 
 export function parseArgs(
   argv: readonly string[],
-): { configPath: string; dbPath: string; logLevel?: LogLevel } {
+): { configPath: string; dbPath: string; logFilePath: string; logLevel?: LogLevel } {
   let configPath: string | undefined;
   let dbPath: string | undefined;
+  let logFilePath: string | undefined;
   let logLevel: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--config') configPath = argv[++i];
     else if (argv[i] === '--db') dbPath = argv[++i];
+    else if (argv[i] === '--log-file') logFilePath = argv[++i];
     else if (argv[i] === '--log-level') logLevel = argv[++i];
   }
   if (!configPath) {
@@ -28,6 +30,7 @@ export function parseArgs(
   return {
     configPath,
     dbPath: dbPath ?? deriveDefaultDbPath(configPath),
+    logFilePath: logFilePath ?? deriveDefaultLogPath(configPath),
     ...(logLevel !== undefined ? { logLevel } : {}),
   };
 }
@@ -42,10 +45,27 @@ export function deriveDefaultDbPath(configPath: string): string {
   return join(dirname(configPath), `${base}.db`);
 }
 
+/**
+ * Symmetric to deriveDefaultDbPath. This is the BASE path handed to
+ * pino-roll's `file` option, not the literal name of the file that ends up
+ * on disk — pino-roll always appends its own rotation suffix (a count
+ * and/or date), so the real file is e.g. `config.1.log`, never `config.log`
+ * itself. Tooling that wants "the current log" should glob `config*.log`.
+ */
+export function deriveDefaultLogPath(configPath: string): string {
+  const base = basename(configPath, extname(configPath));
+  return join(dirname(configPath), `${base}.log`);
+}
+
 async function run(): Promise<void> {
   loadDotenv();
-  const { configPath, dbPath, logLevel } = parseArgs(process.argv.slice(2));
-  const { ctx, fillWatcher, network } = buildOrchestratorContext(configPath, dbPath, logLevel);
+  const { configPath, dbPath, logFilePath, logLevel } = parseArgs(process.argv.slice(2));
+  const { ctx, fillWatcher, network } = buildOrchestratorContext(
+    configPath,
+    dbPath,
+    logLevel,
+    logFilePath,
+  );
 
   const controller = new AbortController();
   // An object, not a bare `let` — a plain boolean gets narrowed to its
