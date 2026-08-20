@@ -18,6 +18,7 @@ export async function waitAndOpenDeal(params: WaitAndOpenDealParams): Promise<Ru
       ? { pollIntervalMs: params.feedPollIntervalMs }
       : {}),
     ...(params.signal !== undefined ? { signal: params.signal } : {}),
+    ...(params.logger !== undefined ? { logger: params.logger } : {}),
   });
 
   if (entrySignal === null) return { outcome: 'shutdown' };

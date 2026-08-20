@@ -2,11 +2,14 @@ import type { Candle, Timeframe } from '../candles/index.js';
 import { Config, EntryFilter } from '../config/index.js';
 import { ExchangeAdapter } from '../exchange/index.js';
 import type { FilterSignal } from '../filters/index.js';
+import type { Logger } from '../logging/index.js';
 
 export interface SignalEngineState {
   oneMinuteCandles: readonly Candle[];
   lastBarCount: Partial<Record<Timeframe, number>>;
   filterStates: (FilterSignal | null)[];
+  /** Latched last-closed-bar value per filter, in config.entry_filters order — DEBUG snapshot input only, doesn't affect entry logic. */
+  filterValues: (number | null)[];
 }
 
 export interface EntrySignal {
@@ -24,6 +27,8 @@ export interface WatchForEntryParams {
   now?: () => number;
   /** Graceful shutdown — checked between polls; watchForEntry resolves with null instead of an EntrySignal if aborted before one fires. */
   signal?: AbortSignal;
+  /** DEBUG filter-state snapshots on every bar_close reevaluation — defaults to a silent logger when omitted. */
+  logger?: Logger;
 }
 
 export type IndicatorComputer = (filter: EntryFilter, candles: readonly Candle[]) => number | null;

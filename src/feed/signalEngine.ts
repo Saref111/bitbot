@@ -5,13 +5,16 @@ import type { Config, EntryFilter } from '../config/index.js';
 import type { EntrySignal, IndicatorComputer, SignalEngineState } from './types.js';
 import { TIMEFRAME_ORDER } from './constants.js';
 import { computeCciSeries, computeRsiSeries } from '../indicators/index.js';
-import { allFiltersActive, applyBarClose } from '../filters/index.js';
+import { allFiltersActive, applyBarClose, buildFilterSnapshot } from '../filters/index.js';
+import { createNoopLogger } from '../logging/index.js';
+import type { Logger } from '../logging/index.js';
 
 export function createSignalEngine(config: Config): SignalEngineState {
   return {
     oneMinuteCandles: [],
     lastBarCount: {},
     filterStates: config.entry_filters.map(() => null),
+    filterValues: config.entry_filters.map(() => null),
   };
 }
 
@@ -45,11 +48,13 @@ export function ingestOneMinuteCandle(
   config: Config,
   state: SignalEngineState,
   candle: Candle,
+  logger: Logger = createNoopLogger(),
 ): { state: SignalEngineState; entrySignal: EntrySignal | null } {
   const oneMinuteCandles = [...state.oneMinuteCandles, candle];
   const referencedTimeframes = new Set(config.entry_filters.map((filter) => filter.timeframe));
   const lastBarCount = { ...state.lastBarCount };
   let filterStates = state.filterStates;
+  let filterValues = state.filterValues;
 
   for (const timeframe of TIMEFRAME_ORDER) {
     if (!referencedTimeframes.has(timeframe)) continue;
@@ -72,6 +77,26 @@ export function ingestOneMinuteCandle(
       closeTime: closedBar.closeTime,
       indicatorValues,
     });
+    filterValues = config.entry_filters.map((filter, index) =>
+      filter.timeframe === timeframe
+        ? (indicatorValues.get(index) ?? null)
+        : (filterValues[index] ?? null),
+    );
+
+    // DEBUG-only (MVP §5/§13.6): a full latched snapshot of every filter's
+    // state, not just this timeframe's — pino no-ops below its configured
+    // level, so this is free on INFO and above.
+    logger.debug(
+      buildFilterSnapshot(
+        config.entry_filters,
+        filterStates,
+        filterValues,
+        timeframe,
+        closedBar.closeTime,
+        TIMEFRAME_ORDER,
+      ),
+      'filter state snapshot (bar_close)',
+    );
   }
 
   const entrySignal = allFiltersActive(filterStates)
@@ -79,7 +104,7 @@ export function ingestOneMinuteCandle(
     : null;
 
   return {
-    state: { oneMinuteCandles, lastBarCount, filterStates },
+    state: { oneMinuteCandles, lastBarCount, filterStates, filterValues },
     entrySignal,
   };
 }
