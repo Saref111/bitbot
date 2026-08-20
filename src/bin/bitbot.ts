@@ -2,7 +2,9 @@
 import { config as loadDotenv } from 'dotenv';
 import { dirname, join, basename, extname } from 'node:path';
 import { buildOrchestratorContext, runBot } from '../main.js';
-import { logLevels, type LogLevel } from '../logging/index.js';
+import { createNoopLogger, logLevels, type LogLevel } from '../logging/index.js';
+import { createNoopNotifier } from '../notify/index.js';
+import { announceSessionStop } from '../orchestrator/index.js';
 
 export function parseArgs(
   argv: readonly string[],
@@ -46,10 +48,14 @@ async function run(): Promise<void> {
   const { ctx, fillWatcher, network } = buildOrchestratorContext(configPath, dbPath, logLevel);
 
   const controller = new AbortController();
-  let shuttingDown = false;
+  // An object, not a bare `let` — a plain boolean gets narrowed to its
+  // literal `false` at declaration and TS won't widen it back across the
+  // `await runBot(...)` below even though a SIGINT/SIGTERM handler can flip
+  // it asynchronously in between; a property read isn't narrowed that way.
+  const shutdown = { requested: false };
   const onSignal = (signalName: string): void => {
-    if (shuttingDown) return;
-    shuttingDown = true;
+    if (shutdown.requested) return;
+    shutdown.requested = true;
     ctx.logger?.info(
       { signal: signalName },
       'shutdown requested, stopping at the next tick boundary',
@@ -64,6 +70,22 @@ async function run(): Promise<void> {
   });
 
   await runBot(ctx, { signal: controller.signal, fillWatcher, network });
+
+  // Paired with buildOrchestratorContext -> runBot's startup announcement
+  // (announceSessionStart). Only for a graceful signal-triggered stop —
+  // runBot returning for any other reason (halted, closed with no restart,
+  // etc.) leaves shutdown.requested false, so this stays silent then.
+  // Awaited so the process doesn't exit before the Telegram ping sends.
+  if (shutdown.requested) {
+    await announceSessionStop({
+      config: ctx.config,
+      db: ctx.db,
+      logger: ctx.logger ?? createNoopLogger(),
+      notifier: ctx.notifier ?? createNoopNotifier(),
+      network,
+      now: ctx.now,
+    });
+  }
 }
 
 // Guards the real run() so importing this module (as test/bin/bitbot.test.ts
