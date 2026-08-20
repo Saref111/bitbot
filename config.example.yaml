@@ -34,3 +34,7 @@ profit_currency: USDT
 trailing_take: null
 stop_loss: null
 halt_after_loss: false
+
+# Optional; overridden by LOG_LEVEL env and by --log-level (see README).
+# logging:
+#   level: info

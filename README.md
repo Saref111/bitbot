@@ -44,6 +44,8 @@ withdrawal-enabled.
 
 `LOG_LEVEL` (optional, default `info`) can also be set here or in the shell
 environment — one of pino's levels: `trace`/`debug`/`info`/`warn`/`error`.
+The `--log-level` CLI flag and `logging.level` in `config.yaml` are two more
+ways to set it; see [Running](#running) for the priority order between them.
 
 ### `config.yaml`
 
@@ -71,23 +73,30 @@ briefly:
   reconstructed grid) instead of waiting for a fresh entry signal.
 - `testnet` in the YAML itself is currently a required schema field but not
   actually read by anything — `.env`'s `BINANCE_TESTNET` is the real switch.
+- `logging.level` (optional) — one of `trace`/`debug`/`info`/`warn`/`error`;
+  see [Running](#running) for how it ranks against `--log-level`/`LOG_LEVEL`.
 
 ## Running
 
 ```bash
-npm start -- --config config.yaml [--db path/to/state.db]
+npm start -- --config config.yaml [--db path/to/state.db] [--log-level debug]
 ```
 
 - `--config <path>` — required, path to the strategy config YAML.
 - `--db <path>` — optional, defaults to the config file's own path with a
   `.db` extension (`config.yaml` → `config.db`, same directory).
+- `--log-level <level>` — optional, one of `trace`/`debug`/`info`/`warn`/`error`;
+  anything else fails startup immediately with a stderr error instead of
+  silently falling back. The pino level used is the first of: this flag, the
+  `LOG_LEVEL` environment variable, `logging.level` in `config.yaml`, then
+  `info`.
 
 `npm start` builds (`tsc`) and then runs the compiled entry point. To build
 once and run separately (e.g. for a systemd service):
 
 ```bash
 npm run build
-node dist/src/bin/bitbot.js --config config.yaml
+node dist/src/bin/bitbot.js --config config.yaml --log-level info
 ```
 
 ### What happens on startup

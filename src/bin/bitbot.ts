@@ -2,18 +2,36 @@
 import { config as loadDotenv } from 'dotenv';
 import { dirname, join, basename, extname } from 'node:path';
 import { buildOrchestratorContext, runBot } from '../main.js';
+import { logLevels, type LogLevel } from '../logging/index.js';
 
-export function parseArgs(argv: readonly string[]): { configPath: string; dbPath: string } {
+export function parseArgs(
+  argv: readonly string[],
+): { configPath: string; dbPath: string; logLevel?: LogLevel } {
   let configPath: string | undefined;
   let dbPath: string | undefined;
+  let logLevel: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--config') configPath = argv[++i];
     else if (argv[i] === '--db') dbPath = argv[++i];
+    else if (argv[i] === '--log-level') logLevel = argv[++i];
   }
   if (!configPath) {
     throw new Error('bitbot: --config <path> is required');
   }
-  return { configPath, dbPath: dbPath ?? deriveDefaultDbPath(configPath) };
+  if (logLevel !== undefined && !isLogLevel(logLevel)) {
+    throw new Error(
+      `bitbot: --log-level must be one of ${logLevels.join('|')}, got "${logLevel}"`,
+    );
+  }
+  return {
+    configPath,
+    dbPath: dbPath ?? deriveDefaultDbPath(configPath),
+    ...(logLevel !== undefined ? { logLevel } : {}),
+  };
+}
+
+function isLogLevel(value: string): value is LogLevel {
+  return (logLevels as readonly string[]).includes(value);
 }
 
 /** "Next to the config" (PLAN.md): same directory, config's own filename with a .db extension. */
@@ -24,8 +42,8 @@ export function deriveDefaultDbPath(configPath: string): string {
 
 async function run(): Promise<void> {
   loadDotenv();
-  const { configPath, dbPath } = parseArgs(process.argv.slice(2));
-  const { ctx, fillWatcher } = buildOrchestratorContext(configPath, dbPath);
+  const { configPath, dbPath, logLevel } = parseArgs(process.argv.slice(2));
+  const { ctx, fillWatcher, network } = buildOrchestratorContext(configPath, dbPath, logLevel);
 
   const controller = new AbortController();
   let shuttingDown = false;
@@ -45,7 +63,7 @@ async function run(): Promise<void> {
     onSignal('SIGTERM');
   });
 
-  await runBot(ctx, { signal: controller.signal, fillWatcher });
+  await runBot(ctx, { signal: controller.signal, fillWatcher, network });
 }
 
 // Guards the real run() so importing this module (as test/bin/bitbot.test.ts
