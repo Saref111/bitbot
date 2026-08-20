@@ -38,11 +38,11 @@ export async function watchForEntry(params: WatchForEntryParams): Promise<EntryS
   const history = await adapter.fetchOHLCV(config.symbol, '1m', undefined, warmupCandles);
   for (const candle of history) {
     if (candle.closeTime > now()) continue; // still-forming bar, not closed yet
-    state = ingestOneMinuteCandle(config, state, candle, logger).state;
+    state = ingestOneMinuteCandle(config, state, candle).state;
     lastOpenTime = candle.openTime;
   }
 
-  for (;;) {
+  for (; ;) {
     if (signal?.aborted) return null;
 
     const candles = await adapter.fetchOHLCV(config.symbol, '1m', undefined, 5);

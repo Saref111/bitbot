@@ -99,6 +99,23 @@ npm run build
 node dist/src/bin/bitbot.js --config config.yaml --log-level info
 ```
 
+### Viewing logs
+
+The bot always writes structured JSON (pino's default) to stdout — that's
+what ends up in the log file and is what other tooling (log aggregators,
+`grep`, `jq`) expects. For a human-readable view, pipe it through
+[`pino-pretty`](https://github.com/pinojs/pino-pretty) (a devDependency, run
+via `npx`) on read, never at write time:
+
+```bash
+npm start -- --config config.yaml --db test.db --log-level debug > bot.log 2>&1 &
+tail -f bot.log | npx pino-pretty
+```
+
+Nothing in the app itself knows about `pino-pretty` — no flag, no config
+key. The file on disk stays raw JSON either way; prettifying is purely how
+you choose to read it.
+
 ### What happens on startup
 
 1. If `include_existing_position` is `true`, adopts whatever position is
