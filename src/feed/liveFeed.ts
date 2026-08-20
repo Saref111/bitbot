@@ -1,5 +1,6 @@
 import { sleep, waitForAbort } from '../util/index.js';
 import { createSignalEngine, ingestOneMinuteCandle } from './signalEngine.js';
+import { createNoopLogger } from '../logging/index.js';
 import type { EntrySignal, WatchForEntryParams } from './types.js';
 
 /**
@@ -29,6 +30,7 @@ export async function watchForEntry(params: WatchForEntryParams): Promise<EntryS
   const warmupCandles = params.warmupCandles ?? 200;
   const pollIntervalMs = params.pollIntervalMs ?? 60_000;
   const now = params.now ?? Date.now;
+  const logger = params.logger ?? createNoopLogger();
 
   let state = createSignalEngine(config);
   let lastOpenTime: number | undefined;
@@ -36,7 +38,7 @@ export async function watchForEntry(params: WatchForEntryParams): Promise<EntryS
   const history = await adapter.fetchOHLCV(config.symbol, '1m', undefined, warmupCandles);
   for (const candle of history) {
     if (candle.closeTime > now()) continue; // still-forming bar, not closed yet
-    state = ingestOneMinuteCandle(config, state, candle).state;
+    state = ingestOneMinuteCandle(config, state, candle, logger).state;
     lastOpenTime = candle.openTime;
   }
 
@@ -47,7 +49,7 @@ export async function watchForEntry(params: WatchForEntryParams): Promise<EntryS
     for (const candle of candles) {
       if (lastOpenTime !== undefined && candle.openTime <= lastOpenTime) continue;
       if (candle.closeTime > now()) continue; // still-forming bar, wait for a later poll
-      const result = ingestOneMinuteCandle(config, state, candle);
+      const result = ingestOneMinuteCandle(config, state, candle, logger);
       state = result.state;
       lastOpenTime = candle.openTime;
       if (result.entrySignal) return result.entrySignal;
