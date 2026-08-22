@@ -6,6 +6,7 @@ import { getExitOrdersByDeal } from '../../src/storage/exitOrderRepository.js';
 import { adoptExistingPosition } from '../../src/orchestrator/adoptExistingPosition.js';
 import { buildConfig } from '../helpers/buildConfig.js';
 import { defaultMarket as market, position } from '../helpers/fixtures.js';
+import { createMockLogger } from '../helpers/mockLogger.js';
 import type { ExchangeAdapter, OpenOrder } from '../../src/exchange/types.js';
 
 function order(overrides: Partial<OpenOrder> = {}): OpenOrder {
@@ -199,6 +200,49 @@ describe('adoptExistingPosition — minimal adoption (MVP §9: TP/SL only, no re
         price: 2000 * 0.95,
         reduceOnly: true,
       }),
+    );
+  });
+});
+
+describe('adoptExistingPosition — Sprint 3 Task H: dealId child-logger binding', () => {
+  it('binds dealId exactly once — this is the third of runDealLoop\'s three upstream entry points', async () => {
+    const db = openDatabase();
+    const config = buildConfig({
+      include_existing_position: true,
+      take_profit_pct: 1,
+      stop_loss: null,
+    });
+
+    const fetchPosition = vi
+      .fn()
+      .mockResolvedValueOnce(position({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 1000 }))
+      .mockResolvedValueOnce(position({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 1000 }))
+      .mockResolvedValue(position({ contracts: 0, entryPrice: null }));
+    const fetchOpenOrders = vi
+      .fn()
+      .mockResolvedValueOnce([order({ price: 2000 * 1.01, amount: 0.05 })])
+      .mockResolvedValue([]);
+
+    const adapter = makeMockAdapter({ fetchPosition, fetchOpenOrders });
+    const { logger, spies, childSpy } = createMockLogger();
+    let t = 1000;
+
+    const result = await adoptExistingPosition({
+      adapter,
+      db,
+      config,
+      now: () => t++,
+      dealId: 'deal-1',
+      options: { pollIntervalMs: 1 },
+      logger,
+    });
+
+    expect(result).toEqual({ outcome: 'closed', closeReason: 'tp' });
+    expect(childSpy).toHaveBeenCalledTimes(1);
+    expect(childSpy).toHaveBeenCalledWith({ dealId: 'deal-1' });
+    expect(spies.info).toHaveBeenCalledWith(
+      expect.objectContaining({ dealId: 'deal-1', closeReason: 'tp' }),
+      'deal closed',
     );
   });
 });

@@ -10,8 +10,8 @@ import { getExitOrdersByDeal, insertExitOrder } from '../../src/storage/exitOrde
 import { runDeal, runDealLoop } from '../../src/orchestrator/runDeal.js';
 import { sleep } from '../../src/util/time.js';
 import { defaultMarket as market, position, twoRungConfig } from '../helpers/fixtures.js';
+import { createMockLogger } from '../helpers/mockLogger.js';
 import type { ExchangeAdapter, OpenOrder } from '../../src/exchange/types.js';
-import type { Logger } from '../../src/logging/logger.js';
 
 function order(overrides: Partial<OpenOrder> = {}): OpenOrder {
   return {
@@ -165,6 +165,55 @@ describe('runDeal — happy path (MVP §5: GRID_PLACED -> ACTIVE -> SETTLING)', 
         price: 1996 * 1.01,
       }),
     ]);
+  });
+});
+
+describe('runDeal — Sprint 3 Task H: dealId child-logger binding', () => {
+  it('binds dealId exactly once, and every log line across the whole lifecycle (grid open through close) carries it without any manually-added field', async () => {
+    const db = openDatabase();
+    const config = twoRungConfig();
+    const adapter = happyPathAdapter();
+    const { logger, spies, childSpy } = createMockLogger();
+    let t = 1000;
+
+    const result = await runDeal({
+      adapter,
+      db,
+      config,
+      now: () => t++,
+      dealId: 'deal-1',
+      entryPrice: 2000,
+      options: { pollIntervalMs: 1 },
+      logger,
+    });
+
+    expect(result).toEqual({ outcome: 'closed', closeReason: 'tp' });
+
+    // Exactly one binding for the whole lifecycle — runDealLoop consumes,
+    // it never re-binds (would show up as a second childSpy call here).
+    expect(childSpy).toHaveBeenCalledTimes(1);
+    expect(childSpy).toHaveBeenCalledWith({ dealId: 'deal-1' });
+
+    // gridPlacedTick's "deal opened" and activeTick's "deal closed" both
+    // fire during this run — neither passes dealId manually any more
+    // (Sprint 3 Task H), so this only holds if the child binding actually
+    // propagates through runDealLoop -> tickCtx -> activeTick/gridPlacedTick.
+    const allCalls = [...spies.debug.mock.calls, ...spies.info.mock.calls, ...spies.warn.mock.calls, ...spies.error.mock.calls];
+    const objectCalls = allCalls.filter(([first]: unknown[]) => typeof first === 'object' && first !== null);
+    expect(objectCalls.length).toBeGreaterThan(0); // sanity: some log lines actually happened
+    for (const [data] of objectCalls) {
+      expect(data).toMatchObject({ dealId: 'deal-1' });
+    }
+
+    // Direct check on the two known lifecycle log lines specifically.
+    expect(spies.info).toHaveBeenCalledWith(
+      expect.objectContaining({ dealId: 'deal-1' }),
+      'deal opened (first fill)',
+    );
+    expect(spies.info).toHaveBeenCalledWith(
+      expect.objectContaining({ dealId: 'deal-1', closeReason: 'tp' }),
+      'deal closed',
+    );
   });
 });
 
@@ -671,7 +720,7 @@ describe('runDeal — NET and reinvest (MVP §7, §13.4)', () => {
       fetchPosition: closingPositionSequence(),
       fetchTrades: vi.fn().mockRejectedValue(new Error('network drop')),
     });
-    const logger = { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as unknown as Logger;
+    const { logger, spies } = createMockLogger();
     let t = 1000;
 
     const result = await runDeal({
@@ -689,7 +738,9 @@ describe('runDeal — NET and reinvest (MVP §7, §13.4)', () => {
     const deal = getDeal(db, 'deal-1');
     expect(deal?.status).toBe('SETTLING'); // not stuck ACTIVE
     expect(deal?.netProfit).toBeNull();
-    expect(logger.warn).toHaveBeenCalledWith(
+    // dealId is no longer passed manually here (Sprint 3 Task H) — it shows
+    // up because runDeal bound it once via .child({ dealId }) at the top.
+    expect(spies.warn).toHaveBeenCalledWith(
       expect.objectContaining({ dealId: 'deal-1' }),
       expect.stringContaining('computeNet failed'),
     );
@@ -769,7 +820,7 @@ describe('runDeal — notifications (MVP §13.6: "угода відкрилас�
     const config = twoRungConfig();
     const adapter = happyPathAdapter();
     const notifier = { notify: vi.fn().mockRejectedValue(new Error('telegram down')) };
-    const logger = { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as unknown as Logger;
+    const { logger, spies } = createMockLogger();
     let t = 1000;
 
     const result = await runDeal({
@@ -786,7 +837,7 @@ describe('runDeal — notifications (MVP §13.6: "угода відкрилас�
 
     expect(result).toEqual({ outcome: 'closed', closeReason: 'tp' });
     expect(getDeal(db, 'deal-1')?.status).toBe('SETTLING');
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(spies.warn).toHaveBeenCalledWith(
       expect.anything(),
       expect.stringContaining('notifier.notify failed'),
     );
@@ -925,7 +976,7 @@ describe('runDeal — WS fill-watch as a wake-up trigger (MVP §13.5)', () => {
     const config = twoRungConfig();
     const adapter = happyPathAdapter();
     const fillWatcher = { next: vi.fn().mockRejectedValue(new Error('WS unavailable')) };
-    const logger = { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as unknown as Logger;
+    const { logger, spies } = createMockLogger();
     let t = 1000;
 
     const result = await runDeal({
@@ -941,7 +992,7 @@ describe('runDeal — WS fill-watch as a wake-up trigger (MVP §13.5)', () => {
 
     expect(result).toEqual({ outcome: 'closed', closeReason: 'tp' });
     // Logged once on the working -> broken transition, not spammed per tick.
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(spies.warn).toHaveBeenCalledWith(
       expect.anything(),
       expect.stringContaining('WS fill-watch failed'),
     );

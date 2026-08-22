@@ -9,6 +9,7 @@ import {
 } from '../storage/index.js';
 import { decide } from '../strategy/index.js';
 import { runDealLoop } from './runDeal.js';
+import { createNoopLogger } from '../logging/index.js';
 import type { AdoptExistingPositionParams, RunDealResult } from './types.js';
 
 /**
@@ -35,8 +36,11 @@ import type { AdoptExistingPositionParams, RunDealResult } from './types.js';
 export async function adoptExistingPosition(
   params: AdoptExistingPositionParams,
 ): Promise<RunDealResult | null> {
-  const { adapter, db, config, now, dealId, options, logger, notifier } = params;
+  const { adapter, db, config, now, dealId, options, notifier } = params;
   if (!config.include_existing_position) return null;
+  // Sprint 3 Task H: bound once here — the third (and last) of runDealLoop's
+  // three upstream entry points that never goes through runDeal.
+  const logger = (params.logger ?? createNoopLogger()).child({ dealId });
 
   const position = await adapter.fetchPosition(config.symbol);
   if (position.contracts <= 0 || position.entryPrice === null) return null;
@@ -130,7 +134,7 @@ export async function adoptExistingPosition(
     now,
     dealId,
     ...(options !== undefined ? { options } : {}),
-    ...(logger !== undefined ? { logger } : {}),
+    logger,
     ...(notifier !== undefined ? { notifier } : {}),
   });
 }
