@@ -60,6 +60,45 @@ describe('computeRsiSeries — edge cases', () => {
   });
 });
 
+describe('computeRsiSeries — warm-up depth matters, not just non-null (Sprint 3 Task A AC 7)', () => {
+  // Deterministic drifting oscillation — mixed up/down moves, no repeating
+  // ties, long enough that its own last value has fully converged past any
+  // seed-transient (Task A's convergence threshold for period=14 is ~108
+  // bars at 0.1% tolerance — see requiredConvergenceBars).
+  const FULL_SERIES = Array.from(
+    { length: 300 },
+    (_, i) => 100 + Math.sin(i * 0.7) * 5 + i * 0.01,
+  );
+  const REFERENCE = computeRsiSeries(FULL_SERIES, 14).at(-1);
+
+  it('reference value is non-null (sanity)', () => {
+    expect(REFERENCE).not.toBeNull();
+  });
+
+  it('an insufficient warm-up window (30 bars) diverges from the converged reference', () => {
+    const insufficient = FULL_SERIES.slice(-30);
+    const value = computeRsiSeries(insufficient, 14).at(-1);
+    expect(value).not.toBeNull();
+    // Genuinely different, not floating-point noise — Wilder's recursion
+    // re-seeds from index 0 of WHATEVER slice it's given, and a short
+    // slice's seed-transient hasn't decayed away by its last bar. This is
+    // exactly what native per-timeframe warm-up (vs. a shallow one) fixes.
+    expect(Math.abs((value as number) - (REFERENCE as number))).toBeGreaterThan(0.5);
+  });
+
+  it('a sufficient warm-up window (130 bars, past the ~108-bar convergence threshold) matches the reference within rounding tolerance', () => {
+    const sufficient = FULL_SERIES.slice(-130);
+    const value = computeRsiSeries(sufficient, 14).at(-1);
+    expect(value).toBeCloseTo(REFERENCE as number, 1);
+  });
+
+  it('the two windows produce genuinely different first-bar values, not the same value by coincidence', () => {
+    const insufficientValue = computeRsiSeries(FULL_SERIES.slice(-30), 14).at(-1);
+    const sufficientValue = computeRsiSeries(FULL_SERIES.slice(-130), 14).at(-1);
+    expect(insufficientValue).not.toBeCloseTo(sufficientValue as number, 0);
+  });
+});
+
 describe('computeRsiSeries — property invariants', () => {
   it('every non-null value is within [0, 100]', () => {
     fc.assert(

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSignalEngine, ingestOneMinuteCandle } from '../../src/feed/signalEngine.js';
+import { createSignalEngine, ingestOneMinuteCandle, seedSignalEngine } from '../../src/feed/signalEngine.js';
 import { buildConfig } from '../helpers/buildConfig.js';
 import type { Candle } from '../../src/candles/types.js';
 import type { EntryFilter } from '../../src/config/types.js';
@@ -252,5 +252,133 @@ describe('signalEngine — unsupported indicator', () => {
 
     // The 5th candle completes the first 5m bar -> must compute MACD -> throws.
     expect(() => ingestOneMinuteCandle(config, state, oneMinuteCandle(4, 100))).toThrow(/MACD/);
+  });
+});
+
+const FIVE_MINUTE_MS = 5 * ONE_MINUTE_MS;
+
+function fiveMinuteCandle(index: number, close: number): Candle {
+  const openTime = START + index * FIVE_MINUTE_MS;
+  return { openTime, closeTime: openTime + FIVE_MINUTE_MS, open: close, high: close, low: close, close };
+}
+
+function makeLogger(): Logger {
+  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger;
+}
+
+describe('ingestOneMinuteCandle — seed/live splice (Sprint 3 Task A AC 4)', () => {
+  const filter: EntryFilter = { indicator: 'RSI', timeframe: '5m', period: 1, op: '>', value: -1 };
+  const config = buildConfig({ entry_filters: [filter] });
+
+  // 3 native 5m bars seeded -> watermark at START + 3*5m, which is exactly
+  // the openTime of the 1m candle at index 15 (the 4th 5m bucket's first
+  // minute) — the seed/live seam this test is checking.
+  function seeded() {
+    return seedSignalEngine(config, {
+      '5m': [fiveMinuteCandle(0, 100), fiveMinuteCandle(1, 101), fiveMinuteCandle(2, 102)],
+    });
+  }
+
+  it('accepts the first live bar that exactly continues the native seed — no dup, no gap warning', () => {
+    const logger = makeLogger();
+    let state = seeded();
+    for (let i = 15; i < 20; i++) {
+      state = ingestOneMinuteCandle(config, state, oneMinuteCandle(i, 200), logger).state;
+    }
+
+    expect(state.candlesByTimeframe['5m']).toHaveLength(4); // 3 seeded + 1 newly closed
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('drops a live bucket that is already covered by the seed (no duplicate append)', () => {
+    // A native seed that already includes the 4th 5m bar (indices 15-19) —
+    // live ticks for that same span must not re-append it.
+    const state = seedSignalEngine(config, {
+      '5m': [
+        fiveMinuteCandle(0, 100),
+        fiveMinuteCandle(1, 101),
+        fiveMinuteCandle(2, 102),
+        fiveMinuteCandle(3, 103),
+      ],
+    });
+    const logger = makeLogger();
+    let next = state;
+    for (let i = 15; i < 20; i++) {
+      next = ingestOneMinuteCandle(config, next, oneMinuteCandle(i, 200), logger).state;
+    }
+
+    expect(next.candlesByTimeframe['5m']).toHaveLength(4); // unchanged — the live bucket was already in the seed
+  });
+
+  it('logs a WARN and resyncs when a live bucket arrives past a gap (skipped bars)', () => {
+    const logger = makeLogger();
+    let state = seeded();
+    // Skip straight to the 5th 5m bucket (indices 20-24), never feeding the
+    // 4th (indices 15-19) — a genuine gap in the closed-bar stream.
+    for (let i = 20; i < 25; i++) {
+      state = ingestOneMinuteCandle(config, state, oneMinuteCandle(i, 200), logger).state;
+    }
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ timeframe: '5m' }),
+      expect.stringContaining('gap'),
+    );
+    expect(state.candlesByTimeframe['5m']).toHaveLength(4); // 3 seeded + the 5th bucket (resynced)
+  });
+});
+
+describe('ingestOneMinuteCandle — live-continuity dedup, input duplicate (Sprint 3 Task A AC 4)', () => {
+  it('feeding the exact same 1m candle twice does not double-count it', () => {
+    const filter: EntryFilter = { indicator: 'RSI', timeframe: '1m', period: 1, op: '>', value: -1 };
+    const config = buildConfig({ entry_filters: [filter] });
+    let state = createSignalEngine(config);
+
+    state = ingestOneMinuteCandle(config, state, oneMinuteCandle(0, 100)).state;
+    state = ingestOneMinuteCandle(config, state, oneMinuteCandle(1, 101)).state;
+    const afterFirstTwo = state.candlesByTimeframe['1m']?.length;
+
+    state = ingestOneMinuteCandle(config, state, oneMinuteCandle(1, 101)).state; // duplicate
+
+    expect(state.candlesByTimeframe['1m']).toHaveLength(afterFirstTwo as number);
+  });
+});
+
+describe('ingestOneMinuteCandle — re-emission dedup, output duplicate (Sprint 3 Task A AC 4)', () => {
+  it('does not double-append a bucket that aggregateCandles re-emits on the following tick, before pruning evicts it from the buffer', () => {
+    const filter: EntryFilter = { indicator: 'RSI', timeframe: '5m', period: 1, op: '>', value: -1 };
+    const config = buildConfig({ entry_filters: [filter] });
+    const seeded = seedSignalEngine(config, {
+      '5m': [fiveMinuteCandle(0, 100), fiveMinuteCandle(1, 101), fiveMinuteCandle(2, 102)],
+    });
+
+    let state = seeded;
+    // Through index 20: one tick INTO the next (5th) bucket. At tick 20,
+    // aggregateCandles still re-derives the just-completed 4th bucket
+    // (indices 15-19, still in the buffer) before this tick's pruning step
+    // runs — the watermark check must drop that re-emission, not append it.
+    for (let i = 15; i <= 20; i++) {
+      state = ingestOneMinuteCandle(config, state, oneMinuteCandle(i, 200)).state;
+    }
+
+    expect(state.candlesByTimeframe['5m']).toHaveLength(4); // 3 seeded + bucket4 exactly once
+  });
+});
+
+describe('ingestOneMinuteCandle — buffer pruning by bucket boundary, not count (Sprint 3 Task A AC 4)', () => {
+  it('keeps emitting new 1h bars across many hours of live ticks', () => {
+    const filter: EntryFilter = { indicator: 'RSI', timeframe: '1h', period: 1, op: '>', value: -1 };
+    const config = buildConfig({ entry_filters: [filter] });
+    let state = createSignalEngine(config);
+
+    const HOURS = 4;
+    for (let i = 0; i < HOURS * 60; i++) {
+      state = ingestOneMinuteCandle(config, state, oneMinuteCandle(i, 100 + i)).state;
+    }
+
+    // A count-based buffer trim (rather than by bucket boundary) risks
+    // dropping candles an unfinished bucket still needs, silently starving
+    // the timeframe of new bars after the first one or two hours — this is
+    // the regression this test guards against.
+    expect(state.candlesByTimeframe['1h']).toHaveLength(HOURS);
   });
 });
