@@ -7,7 +7,7 @@ entry, and repeats — one deal at a time, on one symbol, on one exchange.
 
 ## Status
 
-MVP complete. No UI, no multi-user, no strategy modes beyond "Simple", one
+MVP complete. No UI, no multi-user, no advanced strategy modes, one
 deal in flight at a time. This is a personal single-instance tool, not a
 general-purpose trading platform.
 
