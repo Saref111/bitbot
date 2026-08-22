@@ -132,10 +132,7 @@ export async function gridPlacedTick(ctx: TickContext): Promise<'continue' | Run
     });
 
     // MVP §13.6: "угода відкрилась" — the first fill is what actually opens the deal.
-    logger.info(
-      { dealId, avgEntry, takeProfitPrice: intent.takeProfitPrice },
-      'deal opened (first fill)',
-    );
+    logger.info({ avgEntry, takeProfitPrice: intent.takeProfitPrice }, 'deal opened (first fill)');
     await notifySafely(
       logger,
       notifier,

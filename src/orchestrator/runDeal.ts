@@ -128,7 +128,11 @@ export async function runDealLoop(
  * in any order (not just one entry fill followed by one exit fill).
  */
 export async function runDeal(params: RunDealParams): Promise<RunDealResult> {
-  const { adapter, db, now, dealId, entryPrice, options, logger, notifier } = params;
+  const { adapter, db, now, dealId, entryPrice, options, notifier } = params;
+  // Sprint 3 Task H: bound once here, the only entry point for a fresh
+  // deal — every log line from grid placement through runDealLoop inherits
+  // dealId automatically, no manual { dealId } in downstream log objects.
+  const logger = (params.logger ?? createNoopLogger()).child({ dealId });
   // MVP §7: this deal's budget is the compounded deposit from the reinvest
   // chain (resolveDeposit.ts), not always the static config value — shadows
   // `config` for the rest of this function so every downstream read
@@ -188,7 +192,7 @@ export async function runDeal(params: RunDealParams): Promise<RunDealResult> {
     now,
     dealId,
     ...(options !== undefined ? { options } : {}),
-    ...(logger !== undefined ? { logger } : {}),
+    logger,
     ...(notifier !== undefined ? { notifier } : {}),
   });
 }

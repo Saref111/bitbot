@@ -29,16 +29,16 @@ function warnIfLiquidationEntersGrid(
   logger: Logger,
   gridRows: readonly GridOrderRow[],
   liquidationPrice: number | null,
-  dealId: string,
 ): void {
   if (liquidationPrice === null) return;
   const deepest = gridRows
     .filter((row) => row.status !== 'cancelled')
     .reduce((min, row) => Math.min(min, row.price), Infinity);
   if (Number.isFinite(deepest) && liquidationPrice >= deepest) {
-    // MVP §8: informational only.
+    // MVP §8: informational only. dealId comes from the child logger
+    // bound at runDeal/recoverDeal/adoptExistingPosition (Sprint 3 Task H).
     logger.warn(
-      { dealId, liquidationPrice, deepestRungPrice: deepest },
+      { liquidationPrice, deepestRungPrice: deepest },
       "liquidation price has reached the grid's deepest resting rung",
     );
   }
@@ -73,7 +73,7 @@ export async function activeTick(ctx: TickContext): Promise<'continue' | RunDeal
   const placedExit = exitRows.filter((row) => row.status === 'placed');
   const previousContracts = contractsImpliedByDb(gridRows, exitRows);
 
-  warnIfLiquidationEntersGrid(logger, gridRows, position.liquidationPrice, dealId);
+  warnIfLiquidationEntersGrid(logger, gridRows, position.liquidationPrice);
 
   const events = reconcileTick({
     gridOrders: placedGrid.map((row) => ({
@@ -151,7 +151,7 @@ export async function activeTick(ctx: TickContext): Promise<'continue' | RunDeal
     try {
       netProfit = (await computeNet(adapter, config.symbol, deal.openedAt, logger)).netProfit;
     } catch (error) {
-      logger.warn({ dealId, error }, 'computeNet failed, closing with netProfit: null');
+      logger.warn({ error }, 'computeNet failed, closing with netProfit: null');
       netProfit = null;
     }
 
@@ -211,14 +211,14 @@ export async function activeTick(ctx: TickContext): Promise<'continue' | RunDeal
       }
     });
 
-    logger.info({ dealId, closeReason, netProfit }, 'deal closed');
+    logger.info({ closeReason, netProfit }, 'deal closed');
     await notifySafely(
       logger,
       notifier,
       `Deal ${dealId} closed (${closeReason}), NET=${netProfit === null ? 'unknown' : String(netProfit)}`,
     );
     if (haltAfterLoss) {
-      logger.error({ dealId }, 'deal HALTED after a loss (halt_after_loss)');
+      logger.error('deal HALTED after a loss (halt_after_loss)');
       await notifySafely(
         logger,
         notifier,
@@ -296,7 +296,7 @@ export async function activeTick(ctx: TickContext): Promise<'continue' | RunDeal
     // MVP §13.6: "ордер спрацював" / "усереднення" — a safety-order fill is
     // both at once, one notification covers it.
     logger.info(
-      { dealId, filledRungsCount: newFilledRungsCount, avgEntry: position.entryPrice },
+      { filledRungsCount: newFilledRungsCount, avgEntry: position.entryPrice },
       'grid rung filled (averaging)',
     );
     await notifySafely(
