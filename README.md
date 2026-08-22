@@ -162,11 +162,39 @@ run.
 ```bash
 npm test              # unit tests (vitest)
 npm run test:integration   # integration tests against Binance testnet (needs .env keys)
+npm run test:replay    # golden-vector/fidelity tests against real market data (test/fixtures/)
 npm run lint
 npm run typecheck
 npm run format
 npm run build          # compile src/ (and test/) to dist/
 ```
+
+### Replay dump tool
+
+`src/bin/replayDump.ts` is a QA tool for manually spot-checking one filter's
+per-bar values/activation against Veles' own UI over a chosen window —
+requires a build first, same as the main bot:
+
+```bash
+npm run build
+node dist/src/bin/replayDump.js \
+  --csv-dir test/fixtures/binance-data/csv \
+  --symbol ETHUSDT \
+  --config config.yaml \
+  --indicator RSI \
+  --timeframe 1h \
+  --from 2026-08-18T00:00:00Z \
+  --to 2026-08-19T00:00:00Z
+```
+
+Prints one row per closed bar of the filter's *own* timeframe (not every 1m
+tick) — `sinceCloseTime`, the computed indicator value, and whether the
+filter was active — plus a summary count. `--csv-dir` points at a directory
+of `data.binance.vision`-format klines CSVs (see
+`test/fixtures/binance-data/script.sh` for how those are fetched);
+`--config` is required with no built-in default, so the filter table it
+validates against always comes from a real config file, never a hardcoded
+copy that could drift out of sync.
 
 ## Safety
 

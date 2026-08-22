@@ -60,7 +60,13 @@ export function replayWindow(params: ReplayWindowParams): ReplayResult {
       ? projectGrid(config, result.entrySignal.price, `replay-${String(candle.closeTime)}`)
       : null;
 
-    bars.push({ candle, entrySignal: result.entrySignal, gridPlan });
+    bars.push({
+      candle,
+      entrySignal: result.entrySignal,
+      gridPlan,
+      filterStates: state.filterStates,
+      filterValues: state.filterValues,
+    });
   }
 
   return { bars, finalState: state, warmupSelfCheck };
