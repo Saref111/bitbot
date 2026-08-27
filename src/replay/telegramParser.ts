@@ -1,5 +1,5 @@
 import { parseLocaleNumber } from './numberLocale.js';
-import type { TelegramParseError, VelesEvent } from './types.js';
+import type { TelegramParseError, ExampleExchangeEvent } from './types.js';
 
 function assertNever(value: never): never {
   throw new Error(`telegramParser: unhandled event type: ${String(value)}`);
@@ -14,7 +14,7 @@ function assertNever(value: never): never {
 const TERMINATOR_RE =
   /<a href="" onclick="return ShowHashtag\(&quot;d(\d+)&quot;\)">#d\d+<\/a>\s*\|\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/g;
 
-const EVENT_MARKERS: readonly [VelesEvent['type'], string][] = [
+const EVENT_MARKERS: readonly [ExampleExchangeEvent['type'], string][] = [
   ['dealOpened', '#угодавідкрита'],
   ['firstOrderFilled', '#першийордер'],
   ['orderFilled', '#виконанийордер'],
@@ -56,11 +56,11 @@ function requireMatch(text: string, pattern: RegExp, description: string): RegEx
 }
 
 function buildEvent(
-  type: VelesEvent['type'],
+  type: ExampleExchangeEvent['type'],
   dealId: string,
   timestamp: number,
   unitText: string,
-): VelesEvent {
+): ExampleExchangeEvent {
   switch (type) {
     case 'dealOpened':
       return { type, dealId, timestamp };
@@ -147,7 +147,7 @@ function buildEvent(
 }
 
 /**
- * Sprint 3 Task B: extracts Veles' 4 event kinds from a Telegram Desktop
+ * Sprint 3 Task B: extracts ExampleExchange' 4 event kinds from a Telegram Desktop
  * HTML export. Never throws — collects unparseable event blocks into
  * `errors` instead, so `events.length + errors.length` always equals the
  * number of dealId+timestamp terminators found, which is how "без тихих
@@ -155,10 +155,10 @@ function buildEvent(
  * empty, rather than trusting a parser that might silently drop something.
  */
 export function parseTelegramEvents(html: string): {
-  events: VelesEvent[];
+  events: ExampleExchangeEvent[];
   errors: TelegramParseError[];
 } {
-  const events: VelesEvent[] = [];
+  const events: ExampleExchangeEvent[] = [];
   const errors: TelegramParseError[] = [];
 
   let lastIndex = 0;

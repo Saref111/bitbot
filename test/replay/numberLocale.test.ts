@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { parseLocaleNumber } from '../../src/replay/numberLocale.js';
 
-describe('parseLocaleNumber — Sprint 3 Task B (Veles locale: comma decimal, U+00A0 thousands)', () => {
+describe('parseLocaleNumber — Sprint 3 Task B (ExampleExchange locale: comma decimal, U+00A0 thousands)', () => {
   it('parses a confirmed real value with a thousands separator', () => {
     // Real value from test/fixtures/telegram-data/messages.html (deal
     // d1169434698's orderFilled "Середня ціна"). \u00A0 confirmed via hex dump as the

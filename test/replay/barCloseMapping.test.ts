@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findCandleByCloseTime } from '../../src/replay/barCloseMapping.js';
+import { findCandleByCloseTime, findNearestPrecedingCloseBar } from '../../src/replay/barCloseMapping.js';
 import type { Candle } from '../../src/candles/types.js';
 
 function candle(openTime: number, closeTime: number): Candle {
@@ -26,5 +26,31 @@ describe('findCandleByCloseTime — Sprint 3 Task B', () => {
 
     expect(found).toBeDefined();
     expect(found?.openTime).toBe(openTime);
+  });
+});
+
+describe('findNearestPrecedingCloseBar — Sprint 3 Task D (extracted from tzSelfCheck.ts)', () => {
+  it('finds the candle with the largest closeTime <= target when the target lands mid-bar', () => {
+    const candles = [candle(0, 60_000), candle(60_000, 120_000), candle(120_000, 180_000)];
+    // 65_000 is 5s into the SECOND bar (60_000-120_000) — its own closeTime
+    // (120_000) is still in the future, so the nearest PRECEDING close is
+    // the FIRST bar's (60_000), not the bar the target happens to fall
+    // inside of.
+    expect(findNearestPrecedingCloseBar(candles, 65_000)).toBe(candles[0]);
+  });
+
+  it('returns the exact match when target equals a closeTime', () => {
+    const candles = [candle(0, 60_000), candle(60_000, 120_000)];
+    expect(findNearestPrecedingCloseBar(candles, 60_000)).toBe(candles[0]);
+  });
+
+  it('returns undefined when the target predates every candle', () => {
+    const candles = [candle(60_000, 120_000)];
+    expect(findNearestPrecedingCloseBar(candles, 1000)).toBeUndefined();
+  });
+
+  it('does not require candles to be pre-sorted', () => {
+    const candles = [candle(120_000, 180_000), candle(0, 60_000), candle(60_000, 120_000)];
+    expect(findNearestPrecedingCloseBar(candles, 65_000)).toEqual(candle(0, 60_000));
   });
 });

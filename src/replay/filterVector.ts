@@ -6,7 +6,7 @@ import type { FilterChannelCount, FilterVector, ReplayBarResult } from './types.
  * Sprint 3 Task C: counts, per filter channel, how many of that channel's
  * OWN native-timeframe bars were latched active — NOT how many 1m bars the
  * latch happened to hold active. Confirmed against the real golden vector
- * (docs/SPRINT 3.md §2): Veles' own channel counts decompose cleanly
+ * (docs/SPRINT 3.md §2): ExampleExchange' own channel counts decompose cleanly
  * against each filter's OWN timeframe bar count over the window (e.g.
  * RSI(1h) 474/720 ≈ 66%, matching its <55 threshold), not against 43200
  * 1m bars — a latch held active for one native bar spans ~durationMs/60000
