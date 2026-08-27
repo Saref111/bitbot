@@ -4,6 +4,7 @@ import { computeFilterVector } from '../../src/replay/filterVector.js';
 import { compareToGoldenVector, checkMultiplicity } from '../../src/replay/goldenVectorCheck.js';
 import { replayWindow } from '../../src/replay/replayWindow.js';
 import { buildConfig } from '../helpers/buildConfig.js';
+import { SURVIVOR_FILTERS } from '../helpers/survivorFilters.js';
 import { requireAt } from '../../src/util/index.js';
 import type { ReplayBarResult } from '../../src/replay/types.js';
 import type { EntryFilter } from '../../src/config/types.js';
@@ -120,18 +121,8 @@ describe('computeFilterVector — Sprint 3 Task C', () => {
 // Survivor filter config, in the SAME order as the golden vector's own
 // declared bracket order (docs/SPRINT 3.md §2). Order here is load-bearing:
 // computeFilterVector mirrors entry_filters order verbatim, no reordering.
-const SURVIVOR_FILTERS: EntryFilter[] = [
-  { indicator: 'RSI', timeframe: '1m', period: 14, op: '<', value: 50 },
-  { indicator: 'RSI', timeframe: '5m', period: 14, op: '<', value: 50 },
-  { indicator: 'RSI', timeframe: '30m', period: 14, op: '<', value: 50 },
-  { indicator: 'RSI', timeframe: '1h', period: 14, op: '<', value: 55 },
-  { indicator: 'CCI', timeframe: '5m', period: 20, op: '<', value: 70 },
-  { indicator: 'CCI', timeframe: '15m', period: 20, op: '<', value: 75 },
-  { indicator: 'CCI', timeframe: '1h', period: 20, op: '<', value: 80 },
-];
-
 // docs/SPRINT 3.md §2 — "Кількість сигналів за останній місяць" from the
-// real Veles UI, rolling 30 days, re-captured 2026-08-22/23 to match the
+// real ExampleExchange UI, rolling 30 days, re-captured 2026-08-22/23 to match the
 // freshest window our downloaded fixtures cover (test/fixtures/binance-data
 // only has daily dumps through 2026-08-21 — today's day is never published,
 // per script.sh's own "до вчора" logic). Supersedes an earlier capture

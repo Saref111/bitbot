@@ -1,5 +1,6 @@
 import type { Candle } from '../candles/index.js';
-import type { TzSelfCheckReport, TzSelfCheckSample, VelesEvent } from './types.js';
+import { findNearestPrecedingCloseBar } from './barCloseMapping.js';
+import type { TzSelfCheckReport, TzSelfCheckSample, ExampleExchangeEvent } from './types.js';
 
 /**
  * Sprint 3 Task B: verifies the "Telegram body timestamps are UTC"
@@ -22,21 +23,13 @@ import type { TzSelfCheckReport, TzSelfCheckSample, VelesEvent } from './types.j
  * rounded-off illustrative figure specifically.
  */
 export function checkTimezoneAlignment(
-  dealOpenedEvents: readonly Extract<VelesEvent, { type: 'dealOpened' }>[],
+  dealOpenedEvents: readonly Extract<ExampleExchangeEvent, { type: 'dealOpened' }>[],
   oneMinuteCandles: readonly Candle[],
   toleranceMs: { min: number; max: number } = { min: 0, max: 20_000 },
 ): TzSelfCheckReport {
-  const sorted = [...oneMinuteCandles].sort((a, b) => a.closeTime - b.closeTime);
-
   const samples: TzSelfCheckSample[] = [];
   for (const event of dealOpenedEvents) {
-    // Largest closeTime <= event timestamp: the most-recently-closed bar
-    // at or before the event.
-    let nearest: Candle | undefined;
-    for (const candle of sorted) {
-      if (candle.closeTime > event.timestamp) break;
-      nearest = candle;
-    }
+    const nearest = findNearestPrecedingCloseBar(oneMinuteCandles, event.timestamp);
     if (!nearest) continue; // event predates all loaded candles — not evidence either way
 
     samples.push({
@@ -56,10 +49,10 @@ export function checkTimezoneAlignment(
     offsets.length === 0
       ? { min: 0, max: 0, mean: 0 }
       : {
-          min: Math.min(...offsets),
-          max: Math.max(...offsets),
-          mean: offsets.reduce((sum, o) => sum + o, 0) / offsets.length,
-        };
+        min: Math.min(...offsets),
+        max: Math.max(...offsets),
+        mean: offsets.reduce((sum, o) => sum + o, 0) / offsets.length,
+      };
 
   return {
     samples,

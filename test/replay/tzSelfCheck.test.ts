@@ -4,13 +4,13 @@ import { join } from 'node:path';
 import { checkTimezoneAlignment } from '../../src/replay/tzSelfCheck.js';
 import { parseTelegramEvents } from '../../src/replay/telegramParser.js';
 import { loadCandles } from '../../src/replay/candleCsvLoader.js';
-import type { VelesEvent } from '../../src/replay/types.js';
+import type { ExampleExchangeEvent } from '../../src/replay/types.js';
 import type { Candle } from '../../src/candles/types.js';
 
 const FIXTURES_DIR = join(import.meta.dirname, '../fixtures');
 const BINANCE_CSV_DIR = join(FIXTURES_DIR, 'binance-data/csv');
 
-function dealOpened(dealId: string, timestamp: number): Extract<VelesEvent, { type: 'dealOpened' }> {
+function dealOpened(dealId: string, timestamp: number): Extract<ExampleExchangeEvent, { type: 'dealOpened' }> {
   return { type: 'dealOpened', dealId, timestamp };
 }
 
@@ -24,7 +24,7 @@ describe('checkTimezoneAlignment — Sprint 3 Task B, real fixture data (AC #4)'
     const { events, errors } = parseTelegramEvents(html);
     expect(errors).toEqual([]);
     const dealOpenedEvents = events.filter(
-      (e): e is Extract<VelesEvent, { type: 'dealOpened' }> => e.type === 'dealOpened',
+      (e): e is Extract<ExampleExchangeEvent, { type: 'dealOpened' }> => e.type === 'dealOpened',
     );
     expect(dealOpenedEvents.length).toBeGreaterThan(0);
 

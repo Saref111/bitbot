@@ -14,3 +14,25 @@ export function findCandleByCloseTime(
 ): Candle | undefined {
   return candles.find((candle) => candle.closeTime === closeTimeMs);
 }
+
+/**
+ * Sprint 3 Task D (extracted from tzSelfCheck.ts's original inline scan,
+ * Task B): finds the candle with the largest closeTime <= targetMs — the
+ * most-recently-closed bar at or before an event timestamp. Used both to
+ * verify a real event lands a few seconds after its triggering bar's close
+ * (tzSelfCheck) and to map a real deal-open timestamp onto the bar whose
+ * close it corresponds to (dealTiming). `candles` need not be pre-sorted —
+ * this sorts its own copy defensively, same as the original inline version.
+ */
+export function findNearestPrecedingCloseBar(
+  candles: readonly Candle[],
+  targetMs: number,
+): Candle | undefined {
+  const sorted = [...candles].sort((a, b) => a.closeTime - b.closeTime);
+  let nearest: Candle | undefined;
+  for (const candle of sorted) {
+    if (candle.closeTime > targetMs) break;
+    nearest = candle;
+  }
+  return nearest;
+}

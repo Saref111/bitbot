@@ -4,7 +4,7 @@ import type { FilterDumpRow, ReplayBarResult } from './types.js';
  * Sprint 3 Task C, AC #4: groups consecutive 1m bars by
  * filterStates[filterIndex]?.since, emitting one row per DISTINCT since
  * value — i.e. one row per closed bar of the filter's OWN timeframe, the
- * same cadence a human zooming into that filter's own chart on Veles would
+ * same cadence a human zooming into that filter's own chart on ExampleExchange would
  * see (a 1h filter -> ~24 rows/day, 30m -> ~48, 15m -> ~96). This is the
  * granularity the per-bar spot-check AC actually needs to compare against
  * — not raw 1m rows, which would just repeat the same latched value/active

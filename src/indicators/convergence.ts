@@ -1,6 +1,6 @@
 /**
  * Sprint 3 Task A: how many closed bars a filter's indicator needs before
- * its value has actually converged to what a continuously-running Veles
+ * its value has actually converged to what a continuously-running ExampleExchange
  * instance would show — distinct from "non-null" (RSI(14) is non-null after
  * 15 bars, but its Wilder seed-transient still dominates the value).
  *
