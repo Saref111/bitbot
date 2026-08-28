@@ -211,3 +211,24 @@ export interface ReconstructedRung {
   size: number;
   notionalUsdt: number;
 }
+
+/** Sprint 3 Task F: checks whether a take-profit-closed deal's recorded profit implies an exit price consistent with take_profit_pct% (price movement, not leveraged ROI) from the deal's average entry. */
+export interface ExitReconciliation {
+  dealId: string;
+  avgEntryPrice: number;
+  totalSize: number;
+  profitUsdt: number;
+  /** avgEntryPrice + profitUsdt / totalSize. */
+  impliedExitPrice: number;
+  /** avgEntryPrice * (1 + takeProfitPct / 100). */
+  targetExitPrice: number;
+  /** (impliedExitPrice - targetExitPrice) / tickSize. */
+  diffTicks: number;
+  withinTolerance: boolean;
+}
+
+export interface ExitReconciliationReport {
+  deals: readonly ExitReconciliation[];
+  matchedCount: number;
+  totalCount: number;
+}

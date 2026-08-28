@@ -16,6 +16,7 @@ export { buildFilterDump } from './filterDump.js';
 export { buildDealSegments } from './dealSegments.js';
 export { compareDealTiming } from './dealTiming.js';
 export { reconstructDealRungs } from './dealRungReconstruction.js';
+export { reconcileExitPrices } from './exitReconciliation.js';
 export type {
   CsvCandleSourceOptions,
   AggregationMismatch,
@@ -37,4 +38,6 @@ export type {
   DealTimingResult,
   DealTimingReport,
   ReconstructedRung,
+  ExitReconciliation,
+  ExitReconciliationReport,
 } from './types.js';
