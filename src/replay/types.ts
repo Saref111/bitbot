@@ -203,3 +203,11 @@ export interface DealTimingReport {
   matchedCount: number;
   totalCount: number;
 }
+
+/** Sprint 3 Task E: one rung's own (not cumulative) price/size/notional, recovered from consecutive orderFilled events' cumulative fields. */
+export interface ReconstructedRung {
+  index: number;
+  price: number;
+  size: number;
+  notionalUsdt: number;
+}
