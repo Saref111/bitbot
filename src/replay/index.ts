@@ -15,6 +15,7 @@ export { compareToGoldenVector, checkMultiplicity } from './goldenVectorCheck.js
 export { buildFilterDump } from './filterDump.js';
 export { buildDealSegments } from './dealSegments.js';
 export { compareDealTiming } from './dealTiming.js';
+export { reconstructDealRungs } from './dealRungReconstruction.js';
 export type {
   CsvCandleSourceOptions,
   AggregationMismatch,
@@ -35,4 +36,5 @@ export type {
   DealSegment,
   DealTimingResult,
   DealTimingReport,
+  ReconstructedRung,
 } from './types.js';
