@@ -11,6 +11,16 @@ export const entryFilterSchema = z.object({
   value: z.number(),
 });
 
+// Sprint 3 Task A: closed bars fetched natively per tracked timeframe before
+// going live — same count for every timeframe (Wilder decay is per-bar, not
+// per-calendar-time). Optional and consumed with a named default at the call
+// site (liveFeed.ts), not a zod .default() — test/helpers/buildConfig.ts
+// builds Config as a plain literal, bypassing zod parsing, so a schema-level
+// default would never reach those fixtures.
+export const warmupConfigSchema = z.object({
+  closed_bars: z.number().int().positive(),
+});
+
 export const gridConfigSchema = z
   .object({
     overlap_pct: z.number().nonnegative(),
@@ -43,6 +53,7 @@ export const configSchema = z
     // per_minute is a documented placeholder (MVP §2) but not implemented yet.
     filter_calc: z.literal('bar_close'),
     entry_filters: z.array(entryFilterSchema),
+    warmup: warmupConfigSchema.optional(),
 
     grid: gridConfigSchema,
 

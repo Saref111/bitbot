@@ -131,9 +131,14 @@ describe('makeGridExchangeReady — Survivor pipeline regression (projectGrid ->
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('expected ok result');
+    // Sprint 3 Task E: projectGrid's formula was fixed (two-stage from
+    // rung 1, not one curve from anchor) — rungs 2/3 here changed
+    // accordingly (1874.16->1874.07, 1839.67->1839.46), matching the real
+    // live-order confirmation in CLAUDE.md/docs/MVP-done.md §4.1. Sizes
+    // are unaffected (they depend on notionalUsdt, which didn't change).
     expect(result.rungs[0]?.price).toBeCloseTo(1897.74, 9);
-    expect(result.rungs[1]?.price).toBeCloseTo(1874.16, 9);
-    expect(result.rungs[2]?.price).toBeCloseTo(1839.67, 9);
+    expect(result.rungs[1]?.price).toBeCloseTo(1874.07, 9);
+    expect(result.rungs[2]?.price).toBeCloseTo(1839.46, 9);
     expect(result.rungs[0]?.size).toBeCloseTo(0.018, 9);
     expect(result.rungs[1]?.size).toBeCloseTo(0.019, 9);
     expect(result.rungs[2]?.size).toBeCloseTo(0.02, 9);

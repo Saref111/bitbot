@@ -17,6 +17,7 @@ export default defineConfig([
             'eslint.config.js',
             'vitest.config.ts',
             'vitest.integration.config.ts',
+            'vitest.replay.config.ts',
           ],
         },
         tsconfigRootDir: import.meta.dirname,

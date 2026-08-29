@@ -9,6 +9,7 @@ import {
 import { insertExitOrder } from '../../src/storage/exitOrderRepository.js';
 import { recoverDeal } from '../../src/orchestrator/recoverDeal.js';
 import { defaultMarket as market, position, twoRungConfig } from '../helpers/fixtures.js';
+import { createMockLogger } from '../helpers/mockLogger.js';
 import type { ExchangeAdapter, OpenOrder } from '../../src/exchange/types.js';
 
 function order(overrides: Partial<OpenOrder> = {}): OpenOrder {
@@ -435,5 +436,90 @@ describe('recoverDeal — orphan reconciliation (exchange ahead of DB: createOrd
     const deal = getDeal(db, 'deal-1');
     expect(deal?.status).toBe('SETTLING');
     expect(deal?.closeReason).toBe('tp');
+  });
+});
+
+describe('recoverDeal — Sprint 3 Task H: dealId child-logger binding', () => {
+  it('binds dealId once before reconcileOrphans runs, and every log line (recovery + resumed loop) carries it', async () => {
+    const db = openDatabase();
+    const config = twoRungConfig();
+
+    insertDeal(db, {
+      id: 'deal-1',
+      status: 'GRID_PLACED',
+      direction: 'long',
+      depositUsdt: 200,
+      openedAt: 900,
+    });
+    updateDeal(db, 'deal-1', { pEntry: 2000 });
+    insertGridOrders(
+      db,
+      'deal-1',
+      [
+        { rungIndex: 1, price: 1996, size: 0.15, clientOrderId: 'deal-1-1' },
+        { rungIndex: 2, price: 1900, size: 0.157, clientOrderId: 'deal-1-2' },
+      ],
+      900,
+    );
+    // Neither row marked 'placed' -> rung 1 is an orphan reconcileOrphans
+    // must promote, which is exactly what triggers its new dealId-bearing
+    // INFO line (Sprint 3 Task H).
+    const fetchOpenOrders = vi
+      .fn()
+      .mockResolvedValueOnce([order({ clientOrderId: 'deal-1-1' })])
+      .mockResolvedValueOnce([order({ clientOrderId: 'deal-1-1' })])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        order({ clientOrderId: 'deal-1-2', price: 1900, amount: 0.157 }),
+        order({
+          clientOrderId: 'deal-1-tp-0',
+          side: 'sell',
+          reduceOnly: true,
+          price: 1996 * 1.01,
+          amount: 0.15,
+        }),
+      ])
+      .mockResolvedValue([order({ clientOrderId: 'deal-1-2', price: 1900, amount: 0.157 })]);
+    const fetchPosition = vi
+      .fn()
+      .mockResolvedValueOnce(position({ contracts: 0 }))
+      .mockResolvedValueOnce(position({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }))
+      .mockResolvedValueOnce(position({ contracts: 0.15, entryPrice: 1996, liquidationPrice: 1000 }))
+      .mockResolvedValue(position({ contracts: 0, entryPrice: null }));
+
+    const adapter = makeMockAdapter({ fetchOpenOrders, fetchPosition });
+    const { logger, spies, childSpy } = createMockLogger();
+    let t = 1000;
+
+    const result = await recoverDeal({
+      adapter,
+      db,
+      config,
+      now: () => t++,
+      dealId: 'deal-1',
+      options: { pollIntervalMs: 1 },
+      logger,
+    });
+
+    expect(result).toEqual({ outcome: 'closed', closeReason: 'tp' });
+
+    // Exactly one binding — recoverDeal is one of the three entry points,
+    // runDealLoop must not re-bind on top of it.
+    expect(childSpy).toHaveBeenCalledTimes(1);
+    expect(childSpy).toHaveBeenCalledWith({ dealId: 'deal-1' });
+
+    // reconcileOrphans' own summary line carries dealId, proving the bind
+    // happens before it runs (AC: "reconcileOrphans lines carry dealId").
+    expect(spies.info).toHaveBeenCalledWith(
+      expect.objectContaining({ dealId: 'deal-1', promoted: 1 }),
+      expect.stringContaining('reconcileOrphans'),
+    );
+
+    // The resumed loop's own logging (deal closed) also carries it, with no
+    // manual dealId field in the call site.
+    expect(spies.info).toHaveBeenCalledWith(
+      expect.objectContaining({ dealId: 'deal-1', closeReason: 'tp' }),
+      'deal closed',
+    );
   });
 });

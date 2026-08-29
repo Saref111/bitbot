@@ -6,5 +6,6 @@ dist
 docs/
 *.md
 config.yaml
+**/*-data
 
 !README.md

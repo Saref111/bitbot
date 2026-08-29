@@ -13,7 +13,7 @@ export async function waitAndOpenDeal(params: WaitAndOpenDealParams): Promise<Ru
     adapter: params.adapter,
     config: params.config,
     now: params.now,
-    ...(params.warmupCandles !== undefined ? { warmupCandles: params.warmupCandles } : {}),
+    ...(params.warmupClosedBars !== undefined ? { warmupClosedBars: params.warmupClosedBars } : {}),
     ...(params.feedPollIntervalMs !== undefined
       ? { pollIntervalMs: params.feedPollIntervalMs }
       : {}),
