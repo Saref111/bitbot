@@ -130,7 +130,8 @@ export interface AdoptExistingPositionParams extends OrchestratorContext {
 
 export interface WaitAndOpenDealParams extends OrchestratorContext {
   dealId: string;
-  warmupCandles?: number;
+  /** Sprint 3 Task A: closed bars per tracked timeframe, not "total 1m bars" — see WatchForEntryParams.warmupClosedBars. */
+  warmupClosedBars?: number;
   feedPollIntervalMs?: number;
   dealPollIntervalMs?: number;
   haltConfirmationTicks?: number;

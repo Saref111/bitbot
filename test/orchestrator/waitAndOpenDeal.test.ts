@@ -123,7 +123,7 @@ describe('waitAndOpenDeal — the bot enters exactly when filters align (MVP §5
       config,
       now: () => t++,
       dealId: 'deal-1',
-      warmupCandles: 1,
+      warmupClosedBars: 1,
       feedPollIntervalMs: 1,
       dealPollIntervalMs: 1,
     });
@@ -173,7 +173,7 @@ describe('waitAndOpenDeal — graceful shutdown (AbortSignal)', () => {
       config,
       now: () => 1000,
       dealId: 'deal-1',
-      warmupCandles: 1,
+      warmupClosedBars: 1,
       feedPollIntervalMs: 1,
       signal: controller.signal,
     });

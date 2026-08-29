@@ -8,6 +8,8 @@ import {
 } from '../storage/index.js';
 import type { NewExitOrder, RestoredDeal } from '../storage/index.js';
 import { runDealLoop } from './runDeal.js';
+import { createNoopLogger } from '../logging/index.js';
+import type { Logger } from '../logging/index.js';
 import type { RecoverDealParams, RecoverDealResult } from './types.js';
 
 function assertNever(value: never): never {
@@ -47,7 +49,11 @@ function parseExitType(dealId: string, clientOrderId: string): 'tp' | 'sl' | nul
  * lookup this adapter doesn't have; not adding that surface without
  * verifying it first.
  */
-async function reconcileOrphans(params: RecoverDealParams, restored: RestoredDeal): Promise<void> {
+async function reconcileOrphans(
+  params: RecoverDealParams,
+  restored: RestoredDeal,
+  logger: Logger,
+): Promise<void> {
   const { adapter, db, config, now, dealId } = params;
   const openOrders = await adapter.fetchOpenOrders(config.symbol);
   const openByClientOrderId = new Map(openOrders.map((order) => [order.clientOrderId, order]));
@@ -77,6 +83,13 @@ async function reconcileOrphans(params: RecoverDealParams, restored: RestoredDea
 
   if (promotions.length === 0 && orphanedExits.length === 0) return;
 
+  // Sprint 3 Task G will debug crash-recovery off exactly this surface —
+  // silent recovery would leave a gap right where it matters most.
+  logger.info(
+    { promoted: promotions.length, orphanedExits: orphanedExits.length },
+    'reconcileOrphans: recovered exchange-ahead-of-DB state',
+  );
+
   runInTransaction(db, () => {
     for (const promotion of promotions) {
       updateGridOrderStatus(db, promotion.clientOrderId, {
@@ -97,6 +110,10 @@ async function reconcileOrphans(params: RecoverDealParams, restored: RestoredDea
  */
 export async function recoverDeal(params: RecoverDealParams): Promise<RecoverDealResult> {
   const { db, dealId, now } = params;
+  // Sprint 3 Task H: bound once here, before reconcileOrphans runs — the
+  // recovery path enters runDealLoop directly, skipping runDeal, so this is
+  // the only place dealId ever gets attached on this path.
+  const logger = (params.logger ?? createNoopLogger()).child({ dealId });
   const restored = restoreDeal(db, dealId);
   if (!restored) return { outcome: 'no-deal' };
 
@@ -120,8 +137,8 @@ export async function recoverDeal(params: RecoverDealParams): Promise<RecoverDea
 
     case 'GRID_PLACED':
     case 'ACTIVE':
-      await reconcileOrphans(params, restored);
-      return runDealLoop(params);
+      await reconcileOrphans(params, restored, logger);
+      return runDealLoop({ ...params, logger });
 
     default:
       return assertNever(restored.deal.status);

@@ -6,6 +6,11 @@ import { buildConfig } from '../helpers/buildConfig.js';
 import { candle, defaultMarket as market } from '../helpers/fixtures.js';
 import type { ExchangeAdapter } from '../../src/exchange/types.js';
 import type { EntryFilter } from '../../src/config/types.js';
+import type { Logger } from '../../src/logging/logger.js';
+
+function makeLogger(): Logger {
+  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger;
+}
 
 function makeAdapter(fetchOHLCV: ExchangeAdapter['fetchOHLCV']): ExchangeAdapter {
   return {
@@ -38,12 +43,14 @@ describe('watchForEntry — empty filters (MVP §3: enter immediately)', () => {
     const signal = await watchForEntry({
       adapter,
       config,
-      warmupCandles: 3,
+      warmupClosedBars: 3,
       pollIntervalMs: 1,
     });
 
     expect(signal).toEqual({ price: 103, closeTime: newCandle.closeTime });
-    expect(fetchOHLCV).toHaveBeenCalledWith('ETH/USDT:USDT', '1m', undefined, 3);
+    // closedBars(3) + 1 padding for the still-forming bar Binance always
+    // returns last (Sprint 3 Task A) — see watchForEntry's warm-up fetch.
+    expect(fetchOHLCV).toHaveBeenCalledWith('ETH/USDT:USDT', '1m', undefined, 4);
   });
 
   it('does not re-trigger on a candle already processed in an earlier poll', async () => {
@@ -63,7 +70,7 @@ describe('watchForEntry — empty filters (MVP §3: enter immediately)', () => {
     const signal = await watchForEntry({
       adapter,
       config,
-      warmupCandles: 1,
+      warmupClosedBars: 1,
       pollIntervalMs: 1,
     });
 
@@ -111,7 +118,7 @@ describe('watchForEntry — does not treat a still-forming bar as closed (MVP §
     const signal = await watchForEntry({
       adapter,
       config,
-      warmupCandles: 1,
+      warmupClosedBars: 1,
       pollIntervalMs: 1,
       now,
     });
@@ -147,7 +154,7 @@ describe('watchForEntry — dedup across polls with a real filter', () => {
     const signal = await watchForEntry({
       adapter,
       config,
-      warmupCandles: 1,
+      warmupClosedBars: 1,
       pollIntervalMs: 1,
     });
 
@@ -172,7 +179,7 @@ describe('watchForEntry — graceful shutdown (AbortSignal)', () => {
     const signalPromise = watchForEntry({
       adapter,
       config,
-      warmupCandles: 1,
+      warmupClosedBars: 1,
       pollIntervalMs: 60_000, // long enough that only the abort race arm can win promptly
       signal: controller.signal,
     });
@@ -198,12 +205,88 @@ describe('watchForEntry — graceful shutdown (AbortSignal)', () => {
     const signal = await watchForEntry({
       adapter,
       config,
-      warmupCandles: 1,
+      warmupClosedBars: 1,
       pollIntervalMs: 1,
       signal: controller.signal,
     });
 
     expect(signal).toBeNull();
     expect(fetchOHLCV).toHaveBeenCalledTimes(1); // only the warm-up fetch, no poll
+  });
+});
+
+describe('watchForEntry — native per-timeframe warm-up (Sprint 3 Task A)', () => {
+  it('fetches each tracked timeframe natively, one fetchOHLCV call per timeframe (not 1m aggregation)', async () => {
+    const filter5m: EntryFilter = { indicator: 'RSI', timeframe: '5m', period: 1, op: '>', value: -1 };
+    const filter1h: EntryFilter = { indicator: 'RSI', timeframe: '1h', period: 1, op: '>', value: -1 };
+    const config = buildConfig({ entry_filters: [filter5m, filter1h] });
+
+    const seenTimeframes: string[] = [];
+    const fetchOHLCV: ExchangeAdapter['fetchOHLCV'] = (...args) => {
+      seenTimeframes.push(args[1]);
+      return Promise.resolve([candle(0, 100)]);
+    };
+    const adapter = makeAdapter(fetchOHLCV);
+
+    const controller = new AbortController();
+    controller.abort(); // warm-up still runs in full; only the live poll loop is skipped
+
+    await watchForEntry({ adapter, config, warmupClosedBars: 1, signal: controller.signal });
+
+    expect([...seenTimeframes].sort()).toEqual(['1h', '1m', '5m']);
+  });
+
+  it('logs a fetch-gap WARN when a tracked timeframe returns fewer closed bars than requested', async () => {
+    const filter1h: EntryFilter = { indicator: 'RSI', timeframe: '1h', period: 1, op: '>', value: -1 };
+    const config = buildConfig({ entry_filters: [filter1h] });
+
+    const fetchOHLCV: ExchangeAdapter['fetchOHLCV'] = (...args) => {
+      if (args[1] === '1h') return Promise.resolve([candle(0, 100)]); // only 1, requested 5
+      return Promise.resolve([]);
+    };
+    const adapter = makeAdapter(fetchOHLCV);
+    const logger = makeLogger();
+
+    const controller = new AbortController();
+    controller.abort();
+    await watchForEntry({
+      adapter,
+      config,
+      warmupClosedBars: 5,
+      signal: controller.signal,
+      logger,
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ timeframe: '1h', requested: 5, received: 1 }),
+      expect.stringContaining('fetch-gap'),
+    );
+  });
+});
+
+describe('watchForEntry — warm-up self-check logging (Sprint 3 Task A)', () => {
+  it('logs exactly one INFO line per filter, after warm-up and before the live poll loop', async () => {
+    const filter5m: EntryFilter = { indicator: 'RSI', timeframe: '5m', period: 1, op: '>', value: -1 };
+    const filter1h: EntryFilter = { indicator: 'RSI', timeframe: '1h', period: 1, op: '>', value: -1 };
+    const config = buildConfig({ entry_filters: [filter5m, filter1h] });
+
+    const fetchOHLCV: ExchangeAdapter['fetchOHLCV'] = () =>
+      Promise.resolve([candle(0, 100), candle(1, 101)]);
+    const adapter = makeAdapter(fetchOHLCV);
+    const logger = makeLogger();
+
+    const controller = new AbortController();
+    controller.abort();
+    await watchForEntry({ adapter, config, warmupClosedBars: 1, signal: controller.signal, logger });
+
+    expect(logger.info).toHaveBeenCalledTimes(2); // one per filter, not one combined line
+    const calls = (logger.info as ReturnType<typeof vi.fn>).mock.calls as [
+      Record<string, unknown>,
+      string,
+    ][];
+    expect(calls.map(([entry]) => entry.timeframe)).toEqual(['5m', '1h']);
+    const [firstEntry] = requireAt(calls, 0);
+    expect(firstEntry).toMatchObject({ indicator: 'RSI', timeframe: '5m', period: 1 });
+    expect(typeof firstEntry.converged).toBe('boolean');
   });
 });

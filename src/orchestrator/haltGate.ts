@@ -63,7 +63,7 @@ export async function haltDeal(ctx: TickContext, reason: string): Promise<RunDea
     updateDeal(db, dealId, { status: 'HALTED', closeReason: 'error', closedAt: haltedAt });
     appendEvent(db, { dealId, eventType: 'halted', payload: { reason }, createdAt: haltedAt });
   });
-  logger.error({ dealId, reason }, 'deal HALTED');
+  logger.error({ reason }, 'deal HALTED');
   // MVP §13.6: "HALTED дублюється гучною Telegram-нотифікацією" — this event must never be missed.
   await notifySafely(logger, notifier, `HALTED: deal ${dealId} — ${reason}`);
   return { outcome: 'halted', reason };
