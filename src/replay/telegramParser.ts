@@ -147,7 +147,7 @@ function buildEvent(
 }
 
 /**
- * Sprint 3 Task B: extracts ExampleExchange' 4 event kinds from a Telegram Desktop
+ * Sprint 3 Task B: extracts ExampleExchange's 4 event kinds from a Telegram Desktop
  * HTML export. Never throws — collects unparseable event blocks into
  * `errors` instead, so `events.length + errors.length` always equals the
  * number of dealId+timestamp terminators found, which is how "без тихих
