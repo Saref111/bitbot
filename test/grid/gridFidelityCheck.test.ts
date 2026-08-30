@@ -104,7 +104,7 @@ describe('checkGridFidelity — synthetic', () => {
   });
 });
 
-// Sprint 3 Task E, AC #1/#2/#3: a real screenshot of ExampleExchange' own grid
+// Sprint 3 Task E, AC #1/#2/#3: a real screenshot of ExampleExchange's own grid
 // preview UI (anchor = the shown current price, per the doc's own
 // preview-anchor rule). Rung 14 is off-screen (below the chart's visible
 // bottom) in this particular screenshot — not transcribable, so only

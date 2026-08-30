@@ -172,7 +172,7 @@ npm run build          # compile src/ (and test/) to dist/
 ### Replay dump tool
 
 `src/bin/replayDump.ts` is a QA tool for manually spot-checking one filter's
-per-bar values/activation against ExampleExchange' own UI over a chosen window —
+per-bar values/activation against ExampleExchange's own UI over a chosen window —
 requires a build first, same as the main bot:
 
 ```bash

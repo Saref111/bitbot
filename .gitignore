@@ -5,7 +5,7 @@ dist
 *.log
 docs/
 *.md
-config.yaml
+config*.yaml
 **/*-data
 
 !README.md
