@@ -61,10 +61,14 @@ export async function gridPlacedTick(ctx: TickContext): Promise<'continue' | Run
       );
     }
 
+    // Sprint 4 Task A: exit side is `sell` for long, `buy` for short — same
+    // rule as exitTargets.ts's reprice path, applied here for the initial
+    // placement on the deal's first fill.
+    const exitSide = config.direction === 'long' ? 'sell' : 'buy';
     const tpClientOrderId = `${dealId}-tp-0`;
     await adapter.createOrder({
       symbol: config.symbol,
-      side: 'sell',
+      side: exitSide,
       type: 'limit',
       amount: position.contracts,
       price: intent.takeProfitPrice,
@@ -76,7 +80,7 @@ export async function gridPlacedTick(ctx: TickContext): Promise<'continue' | Run
       slClientOrderId = `${dealId}-sl-0`;
       await adapter.createOrder({
         symbol: config.symbol,
-        side: 'sell',
+        side: exitSide,
         type: 'limit',
         amount: position.contracts,
         price: intent.stopLossPrice,
@@ -174,7 +178,14 @@ export async function gridPlacedTick(ctx: TickContext): Promise<'continue' | Run
       );
     }
 
-    if (shouldCancelForRunaway(deal.pEntry, currentPrice, config.grid.runaway_cancel_pct)) {
+    if (
+      shouldCancelForRunaway(
+        deal.pEntry,
+        currentPrice,
+        config.grid.runaway_cancel_pct,
+        config.direction,
+      )
+    ) {
       await adapter.cancelAll(config.symbol);
       const cancelledAt = now();
       runInTransaction(db, () => {

@@ -26,12 +26,34 @@ import type { GridPlan, GridRung } from './types.js';
  * Volumes are multiplicative-martingale, sized so their sum equals the
  * leveraged budget (deposit_usdt * leverage) — this is MVP §8's "distribution
  * check", enforced by construction rather than validated separately.
+ *
+ * Sprint 4 Task A: `config.direction` picks which side of entryPrice the
+ * grid sits on via `sideSign` (-1 long, +1 short) in both price stages —
+ * read off `config` like every other grid parameter here (deposit, leverage,
+ * grid.*), not a separate argument: projectGrid is called exactly once per
+ * deal, immediately next to a freshly-written config, so there's never a
+ * call site where the correct direction differs from config.direction
+ * (unlike decide/deliverNextRungs/reconcileExitTargets, which run
+ * repeatedly across a deal's lifecycle and sometimes need deal.direction
+ * instead). `Config['direction']` is the real `'long'|'short'` union
+ * (config/schema.ts widened it from z.enum(['long'])), so this comparison
+ * is genuinely reachable at the type level — no dead-code lint complaint,
+ * no cast. For direction='long', sideSign=-1 makes every `sideSign*...`
+ * term the exact negation used before this parameter existed, so
+ * `(1 + sideSign*x)` is `(1 - x)` bit-for-bit (IEEE 754 negation is exact)
+ * — LONG output is unchanged, not just numerically close. depthPct is
+ * normalized by `-sideSign` for the same reason: for long, `-sideSign` is
+ * `1`, so `-sideSign*(1 - price/entryPrice)*100` is
+ * `(1 - price/entryPrice)*100` verbatim; for short (price above entryPrice)
+ * it flips the otherwise-negative raw distance back to the same "% away
+ * from anchor" magnitude convention.
  */
 export function projectGrid(config: Config, entryPrice: number, dealId: string): GridPlan {
   if (!(entryPrice > 0)) {
     throw new Error('projectGrid: entryPrice must be positive');
   }
 
+  const sideSign = config.direction === 'long' ? -1 : 1;
   const { overlap_pct, indent_pct, log_distribution, orders, martingale_pct } = config.grid;
   const budget = config.deposit_usdt * config.leverage;
   const m = martingale_pct / 100;
@@ -43,13 +65,16 @@ export function projectGrid(config: Config, entryPrice: number, dealId: string):
   const sumWeights = weights.reduce((sum, weight) => sum + weight, 0);
   const v1 = budget / sumWeights;
 
-  const rung1Price = entryPrice * (1 - indent_pct / 100);
+  const rung1Price = entryPrice * (1 + sideSign * (indent_pct / 100));
 
   const rungs: GridRung[] = [];
   for (let i = 1; i <= orders; i++) {
     const x = (i - 1) / (orders - 1);
-    const price = i === 1 ? rung1Price : rung1Price * (1 - (overlap_pct * Math.pow(x, log_distribution)) / 100);
-    const depthPct = (1 - price / entryPrice) * 100;
+    const price =
+      i === 1
+        ? rung1Price
+        : rung1Price * (1 + sideSign * ((overlap_pct * Math.pow(x, log_distribution)) / 100));
+    const depthPct = -sideSign * (1 - price / entryPrice) * 100;
     const notionalUsdt = v1 * (weights[i - 1] ?? 0);
     const size = notionalUsdt / price;
 

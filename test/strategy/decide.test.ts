@@ -103,11 +103,16 @@ const gridParamsArb = fc
   })
   .map(({ orders }) => ({ orders }));
 
+// Sprint 4 Task A: direction fixed explicitly to 'long' here (not left to
+// buildConfig's default) — this property asserts the LONG-specific formula
+// `avgEntry * (1 + tp/100)`, which decide.ts now only produces for
+// direction='long'; a SHORT counterpart belongs to Task B's mirror tests.
 const configArb = fc
   .record({
     grid: gridParamsArb,
     take_profit_pct: fc.double({ min: 0.01, max: 20, noNaN: true }),
     stop_loss: fc.option(fc.double({ min: 0.01, max: 50, noNaN: true }), { nil: null }),
+    direction: fc.constant('long' as const),
   })
   .map((overrides) => buildConfig(overrides));
 

@@ -11,6 +11,18 @@ function assertNever(value: never): never {
  * against a live price itself, because TP/SL/grid orders are resting
  * reduceOnly/limit orders on the exchange; the exchange decides when they
  * fill, not this function.
+ *
+ * Sprint 4 Task A: TP/SL sign comes from `config.direction` via the same
+ * `sideSign` convention as projectGrid.ts (-1 long, +1 short), read off
+ * `config` directly — same reasoning as projectGrid/deliverNextRungs (no
+ * separate parameter; DecideContext already carries `config`). LONG target
+ * is ABOVE avg (take-profit multiplier `-sideSign` = +1), SHORT mirrors
+ * below; SL is the opposite sign in both cases. For direction='long',
+ * `-sideSign` is `1` and `1 - (-1)*x` / `1 + (-1)*x` are `1 + x` / `1 - x`
+ * bit-for-bit (IEEE 754 negation is exact) — output unchanged from before
+ * this parameter existed. SL sign still flips even when `stop_loss` is
+ * `null` (Survivor has it off) so the formula isn't LONG-only dormant code
+ * waiting to be wrong the moment SL is turned on for a SHORT deal.
  */
 export function decide(context: DecideContext): Intent {
   const { config, filledRungsCount, avgEntry, event } = context;
@@ -36,9 +48,12 @@ export function decide(context: DecideContext): Intent {
       return { type: 'close', reason: 'stop_loss' };
 
     case 'rung_filled': {
-      const takeProfitPrice = avgEntry * (1 + config.take_profit_pct / 100);
+      const sideSign = config.direction === 'long' ? -1 : 1;
+      const takeProfitPrice = avgEntry * (1 - sideSign * (config.take_profit_pct / 100));
       const stopLossPrice =
-        config.stop_loss === null ? null : avgEntry * (1 - config.stop_loss / 100);
+        config.stop_loss === null
+          ? null
+          : avgEntry * (1 + sideSign * (config.stop_loss / 100));
 
       return {
         type: filledRungsCount === 1 ? 'open' : 'safety',
