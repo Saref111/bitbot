@@ -16,6 +16,7 @@ import { deliverNextRungs } from './deliverRungs.js';
 import { reconcileExitTargets } from './exitTargets.js';
 import { computeNet } from './computeNet.js';
 import { haltSignature, advanceHaltGate, haltDeal, notifySafely } from './haltGate.js';
+import type { Direction } from '../config/index.js';
 import type { Logger } from '../logging/index.js';
 import type { DealCloseReason, GridOrderRow } from '../storage/index.js';
 import type {
@@ -25,16 +26,31 @@ import type {
   TickContext,
 } from './types.js';
 
-function warnIfLiquidationEntersGrid(
+/**
+ * Sprint 4 Task A: `direction` is a minimal parameter (like runaway.ts),
+ * not the whole `Config` — this function only ever needed one field beyond
+ * what it already had. "Deepest" rung is the one closest to where
+ * liquidation risk grows: for long the grid sits below entry, so deepest =
+ * lowest price and the warning fires as liquidationPrice rises up to meet
+ * it; for short the grid sits above entry, so deepest = highest price and
+ * the warning fires as liquidationPrice falls down to meet it — both the
+ * aggregation (min/max) and the comparison direction mirror.
+ */
+export function warnIfLiquidationEntersGrid(
   logger: Logger,
   gridRows: readonly GridOrderRow[],
   liquidationPrice: number | null,
+  direction: Direction,
 ): void {
   if (liquidationPrice === null) return;
-  const deepest = gridRows
-    .filter((row) => row.status !== 'cancelled')
-    .reduce((min, row) => Math.min(min, row.price), Infinity);
-  if (Number.isFinite(deepest) && liquidationPrice >= deepest) {
+  const liveRows = gridRows.filter((row) => row.status !== 'cancelled');
+  const deepest =
+    direction === 'long'
+      ? liveRows.reduce((min, row) => Math.min(min, row.price), Infinity)
+      : liveRows.reduce((max, row) => Math.max(max, row.price), -Infinity);
+  const liquidationReachedDeepest =
+    direction === 'long' ? liquidationPrice >= deepest : liquidationPrice <= deepest;
+  if (Number.isFinite(deepest) && liquidationReachedDeepest) {
     // MVP §8: informational only. dealId comes from the child logger
     // bound at runDeal/recoverDeal/adoptExistingPosition (Sprint 3 Task H).
     logger.warn(
@@ -73,7 +89,7 @@ export async function activeTick(ctx: TickContext): Promise<'continue' | RunDeal
   const placedExit = exitRows.filter((row) => row.status === 'placed');
   const previousContracts = contractsImpliedByDb(gridRows, exitRows);
 
-  warnIfLiquidationEntersGrid(logger, gridRows, position.liquidationPrice);
+  warnIfLiquidationEntersGrid(logger, gridRows, position.liquidationPrice, config.direction);
 
   const events = reconcileTick({
     gridOrders: placedGrid.map((row) => ({

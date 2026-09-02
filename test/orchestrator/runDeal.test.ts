@@ -140,6 +140,7 @@ describe('runDeal — happy path (MVP §5: GRID_PLACED -> ACTIVE -> SETTLING)', 
     expect(adapter.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
         clientOrderId: 'deal-1-tp-0',
+        side: 'sell',
         price: 1996 * 1.01,
         amount: 0.15,
         reduceOnly: true,

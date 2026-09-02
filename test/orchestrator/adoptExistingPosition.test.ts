@@ -128,6 +128,7 @@ describe('adoptExistingPosition — minimal adoption (MVP §9: TP/SL only, no re
     expect(adapter.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
         clientOrderId: 'deal-1-tp-0',
+        side: 'sell',
         price: 2000 * 1.01,
         amount: 0.05,
         reduceOnly: true,
@@ -197,6 +198,7 @@ describe('adoptExistingPosition — minimal adoption (MVP §9: TP/SL only, no re
     expect(adapter.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
         clientOrderId: 'deal-1-sl-0',
+        side: 'sell',
         price: 2000 * 0.95,
         reduceOnly: true,
       }),

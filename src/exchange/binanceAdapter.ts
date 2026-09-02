@@ -102,6 +102,16 @@ export function createBinanceAdapter(client: CcxtLike): ExchangeAdapter {
       // binanceusdm; fetchPositions() (plural) is the futures-correct call.
       const positions = await client.fetchPositions([symbol]);
       const position = positions.find((p) => p.symbol === symbol);
+      // Sprint 4 Task A, Slice 6 watch-point #1 (verified, not assumed):
+      // orchestrator/reconcile.ts's grid-vs-exit fill attribution maps
+      // `position.contracts` growth to grid fills and shrinkage to exit
+      // fills — only correct if `contracts` is always an unsigned
+      // magnitude. Confirmed by reading ccxt's own source
+      // (node_modules/ccxt/js/src/binance.js, parsePosition/
+      // parsePositionRisk): `contracts = this.parseNumber(Precise.stringAbs(
+      // this.safeString(position, 'positionAmt')))` — ccxt explicitly
+      // abs()'s Binance's raw signed `positionAmt` (negative for shorts)
+      // before exposing it here. Safe for SHORT too, not just LONG.
       const contracts = position?.contracts ?? 0;
       return {
         symbol,

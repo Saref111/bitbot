@@ -1,4 +1,4 @@
-import type { Config } from '../config/index.js';
+import type { Config, Direction } from '../config/index.js';
 
 export type DealStatus = 'WAITING_SIGNAL' | 'GRID_PLACED' | 'ACTIVE' | 'SETTLING' | 'HALTED';
 export type DealCloseReason = 'tp' | 'sl' | 'liquidation' | 'runaway' | 'error';
@@ -9,7 +9,7 @@ export type ExitOrderStatus = 'placed' | 'filled' | 'cancelled';
 export interface DealRow {
   id: string;
   status: DealStatus;
-  direction: 'long' | 'short';
+  direction: Direction;
   pEntry: number | null;
   filledRungsCount: number;
   depositUsdt: number;
@@ -90,7 +90,7 @@ export interface RestoredDeal {
 export interface NewDeal {
   id: string;
   status: DealStatus;
-  direction: 'long' | 'short';
+  direction: Direction;
   depositUsdt: number;
   openedAt: number;
 }
