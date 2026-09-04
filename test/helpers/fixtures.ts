@@ -7,7 +7,20 @@ export const defaultMarket: MarketInfo = {
   tickSize: 0.01,
   stepSize: 0.001,
   minNotional: 5,
+  minQty: null,
 };
+
+// Sprint 4 Task C, Slice C2b: MarketInfo.minNotional is nullable now (Bybit
+// has none), but createBinanceAdapter's own getMarketInfo still throws if
+// Binance ever returned null — so a real testnet Binance market is
+// guaranteed non-null here. Integration tests sizing a test order off
+// minNotional use this instead of a silent `?? 0` fallback.
+export function requireMinNotional(market: MarketInfo): number {
+  if (market.minNotional == null) {
+    throw new Error('requireMinNotional: expected a Binance market with minNotional set');
+  }
+  return market.minNotional;
+}
 
 export function position(overrides: Partial<Position> = {}): Position {
   return {

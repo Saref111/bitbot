@@ -23,8 +23,17 @@ function truncateSizeToStep(size: number, stepSize: number): number {
 /**
  * MVP §8, §13.3: round each rung's price/size to the exchange's
  * tickSize/stepSize before placing; if any rung's rounded notional falls
- * under minNotional, reject the WHOLE grid (not just that one rung) since a
- * partial grid would no longer match projectGrid's computed distribution.
+ * under minNotional, or its size falls under minQty, reject the WHOLE grid
+ * (not just that one rung) since a partial grid would no longer match
+ * projectGrid's computed distribution.
+ *
+ * Sprint 4 Task C, Slice C2b: minNotional (dollar floor, Binance-style) and
+ * minQty (contract-quantity floor, Bybit-style) are two differently-shaped
+ * constraints — no single conversion between them holds across a grid whose
+ * rungs sit at different prices (see the Slice C2 review for why
+ * minQty*price can't be folded into a fixed minNotional). Each exchange
+ * populates only the field it actually enforces; the other is null and its
+ * check is skipped.
  */
 export function makeGridExchangeReady(plan: GridPlan, market: MarketInfo): GridReadyResult {
   const rungs: ReadyRung[] = [];
@@ -34,10 +43,18 @@ export function makeGridExchangeReady(plan: GridPlan, market: MarketInfo): GridR
     const size = truncateSizeToStep(rung.size, market.stepSize);
     const notionalUsdt = price * size;
 
-    if (notionalUsdt < market.minNotional) {
+    if (market.minNotional != null && notionalUsdt < market.minNotional) {
       return {
         ok: false,
         reason: `rung ${String(rung.index)} notional ${String(notionalUsdt)} is below minNotional ${String(market.minNotional)}`,
+        rungIndex: rung.index,
+      };
+    }
+
+    if (market.minQty != null && size < market.minQty) {
+      return {
+        ok: false,
+        reason: `rung ${String(rung.index)} size ${String(size)} is below minQty ${String(market.minQty)}`,
         rungIndex: rung.index,
       };
     }

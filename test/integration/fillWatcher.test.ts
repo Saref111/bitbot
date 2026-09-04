@@ -12,6 +12,7 @@ import { createBinanceAdapter } from '../../src/exchange/binanceAdapter.js';
 import { createBinanceFillWatcher } from '../../src/exchange/fillWatcher.js';
 import { sleep } from '../../src/util/time.js';
 import type { ExchangeAdapter, FillWatcher } from '../../src/exchange/types.js';
+import { requireMinNotional } from '../helpers/fixtures.js';
 
 const SYMBOL = 'ETH/USDT:USDT';
 
@@ -70,7 +71,7 @@ describe('createBinanceFillWatcher — real WS wake-up on testnet (MVP §13.5, P
     // the REST-only tests).
     const price = Math.round(lastClose * 1.02 * 100) / 100;
     const amount =
-      Math.ceil((market.minNotional * 1.5) / price / market.stepSize) * market.stepSize;
+      Math.ceil((requireMinNotional(market) * 1.5) / price / market.stepSize) * market.stepSize;
 
     await adapter.createOrder({
       symbol: SYMBOL,
