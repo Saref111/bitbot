@@ -12,6 +12,7 @@ import { runDeal } from '../../src/orchestrator/runDeal.js';
 import { pollUntil } from '../../src/orchestrator/pollUntil.js';
 import type { ExchangeAdapter, OpenOrder } from '../../src/exchange/types.js';
 import { buildConfig } from '../helpers/buildConfig.js';
+import { requireMinNotional } from '../helpers/fixtures.js';
 
 const SYMBOL = 'ETH/USDT:USDT';
 
@@ -45,7 +46,7 @@ describe('createBinanceAdapter.cancelOrder — cancels by clientOrderId on testn
     const market = await adapter.getMarketInfo(SYMBOL);
     const price = Math.round(lastClose * 0.8 * 100) / 100;
     const amount =
-      Math.ceil((market.minNotional * 1.5) / price / market.stepSize) * market.stepSize;
+      Math.ceil((requireMinNotional(market) * 1.5) / price / market.stepSize) * market.stepSize;
 
     await adapter.createOrder({
       symbol: SYMBOL,
@@ -103,7 +104,7 @@ describe('createBinanceAdapter.createOrder — idempotent retry on a duplicate c
     const market = await adapter.getMarketInfo(SYMBOL);
     const price = Math.round(lastClose * 0.8 * 100) / 100;
     const amount =
-      Math.ceil((market.minNotional * 1.5) / price / market.stepSize) * market.stepSize;
+      Math.ceil((requireMinNotional(market) * 1.5) / price / market.stepSize) * market.stepSize;
     const params = {
       symbol: SYMBOL,
       side: 'buy' as const,
@@ -408,7 +409,7 @@ describe('createBinanceAdapter.fetchTrades/fetchFundingHistory — real shape on
     // the external-cancel test above).
     const price = Math.round(lastClose * 1.02 * 100) / 100;
     const amount =
-      Math.ceil((market.minNotional * 1.5) / price / market.stepSize) * market.stepSize;
+      Math.ceil((requireMinNotional(market) * 1.5) / price / market.stepSize) * market.stepSize;
 
     await adapter.createOrder({
       symbol: SYMBOL,

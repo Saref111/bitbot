@@ -20,7 +20,10 @@ export interface MarketInfo {
   symbol: string;
   tickSize: number;
   stepSize: number;
-  minNotional: number;
+  /** Dollar-value floor (Binance-style). Null when the exchange doesn't expose one (Bybit swaps — see minQty). */
+  minNotional: number | null;
+  /** Contract-quantity floor (Bybit-style). Null when the exchange doesn't expose one (Binance). */
+  minQty: number | null;
 }
 
 export interface Position {

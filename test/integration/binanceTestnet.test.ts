@@ -7,6 +7,7 @@ import { loadExchangeCredentials } from '../../src/exchange/credentials.js';
 import { createBinanceCcxtClient } from '../../src/exchange/binanceClient.js';
 import { createBinanceAdapter } from '../../src/exchange/binanceAdapter.js';
 import type { ExchangeAdapter } from '../../src/exchange/types.js';
+import { requireMinNotional } from '../helpers/fixtures.js';
 
 const SYMBOL = 'ETH/USDT:USDT';
 
@@ -58,7 +59,7 @@ describe('Binance Futures testnet — full adapter cycle (MVP §11)', () => {
     const market = await adapter.getMarketInfo(SYMBOL);
     // 50% below the last close — deep enough that it will not fill during the test.
     const farPrice = Math.round((lastClose * 0.5) / market.tickSize) * market.tickSize;
-    const rawAmount = market.minNotional / farPrice;
+    const rawAmount = requireMinNotional(market) / farPrice;
     const amount = Math.ceil(rawAmount / market.stepSize) * market.stepSize;
 
     const clientOrderId = `bitbot-test-${String(Date.now())}`;

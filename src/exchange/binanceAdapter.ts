@@ -89,7 +89,12 @@ export function createBinanceAdapter(client: CcxtLike): ExchangeAdapter {
       if (tickSize == null || stepSize == null || minNotional == null) {
         throw new Error(`getMarketInfo: incomplete market info for ${symbol}`);
       }
-      return { symbol, tickSize, stepSize, minNotional };
+      // Sprint 4 Task C, Slice C2b: Binance enforces a dollar-notional
+      // floor (minNotional above), not a separate quantity floor — null
+      // here keeps gridReady's minQty check inert for Binance, unchanged
+      // behavior. Not reading LOT_SIZE's minQty from ccxt now; Binance's
+      // own minNotional already covers the real-world case.
+      return { symbol, tickSize, stepSize, minNotional, minQty: null };
     },
 
     async fetchOHLCV(symbol, timeframe, since, limit) {
