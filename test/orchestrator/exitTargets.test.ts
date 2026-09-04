@@ -200,4 +200,49 @@ describe('reconcileExitTargets — level-check (MVP §5/§6: reprice on avg chan
       }),
     ).rejects.toThrow(/network error/);
   });
+
+  // Sprint 4 Task B: mirrors "cancels and replaces the TP..." above with
+  // direction='short' — same reprice trigger, only the exit side flips.
+  it('SHORT: cancels and replaces the TP with side buy (Sprint 4 Task B)', async () => {
+    const config = buildConfig({ direction: 'short', take_profit_pct: 1, stop_loss: null });
+    const tp = exitRow({ clientOrderId: 'deal-1-tp-0', price: 2000 * 0.99 });
+    const adapter = makeMockAdapter();
+
+    const mutations = await reconcileExitTargets({
+      adapter,
+      config,
+      dealId: 'deal-1',
+      desiredTakeProfitPrice: 1950 * 0.99, // avg moved -> new TP target moved with it
+      desiredStopLossPrice: null,
+      positionContracts: 0.05,
+      restingExitOrders: [tp],
+      allExitOrders: [tp],
+      now: () => 5000,
+    });
+
+    expect(adapter.cancelOrder).toHaveBeenCalledWith(config.symbol, 'deal-1-tp-0');
+    expect(adapter.createOrder).toHaveBeenCalledWith({
+      symbol: config.symbol,
+      side: 'buy',
+      type: 'limit',
+      amount: 0.05,
+      price: 1950 * 0.99,
+      clientOrderId: 'deal-1-tp-1',
+      reduceOnly: true,
+    });
+    expect(mutations).toEqual([
+      { kind: 'cancelled', clientOrderId: 'deal-1-tp-0', cancelledAt: 5000 },
+      {
+        kind: 'inserted',
+        exitOrder: {
+          dealId: 'deal-1',
+          type: 'tp',
+          clientOrderId: 'deal-1-tp-1',
+          price: 1950 * 0.99,
+          amount: 0.05,
+          createdAt: 5000,
+        },
+      },
+    ]);
+  });
 });

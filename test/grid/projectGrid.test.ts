@@ -208,3 +208,127 @@ describe('projectGrid — property invariants (MVP §4, §8)', () => {
     );
   });
 });
+
+// Sprint 4 Task B: locks in the sign-flip mirror convention for SHORT
+// (docs/SPRINT_4.md's "Конвенція дзеркала" decision) with an INDEPENDENT
+// oracle, not projectGrid's own sideSign code re-read a different way —
+// `2a - price^LONG` is explicitly rejected by the AC because code and test
+// would then be wrong in the same way together (vacuous pass on a buggy
+// grid). The in-test formula below still shares projectGrid's STRUCTURE
+// (same x, same two-stage composition) — it only independently re-derives
+// the sign, so on its own it would only catch a wrong sideSign mapping, not
+// a structural bug (wrong x, swapped stages, additive vs multiplicative).
+// Non-vacuity for the shared structure is borrowed transitively from the
+// LONG exact-number tests above (pinned to real Survivor live-order data,
+// 1897.73692/1233.528998) — that chain holds as long as those stay
+// untouched. The two hand-computed anchors just below give SHORT its own
+// external anchor for the boundary rungs, independent of any formula
+// written in this file, closing that borrowed link at exactly the two
+// points where it matters most (rung 1 and rung N).
+describe('projectGrid — SHORT mirror (Sprint 4 Task B)', () => {
+  it('SHORT rung 1 and rung N match hand-computed Survivor anchors (not derived from the in-test formula below)', () => {
+    // entry=1901.54, indent_pct=0.2, overlap_pct=35 (Survivor defaults).
+    // rung 1  = 1901.54 * 1.002 = 1905.34308 (mirrors LONG's 1901.54*0.998=1897.73692)
+    // rung 14 = 1905.34308 * 1.35 = 2572.213158 (x=1 at the last rung, so x^L=1
+    //   regardless of L — mirrors LONG's 1897.73692*0.65=1233.528998)
+    const config = buildConfig({ direction: 'short' });
+    const plan = projectGrid(config, SURVIVOR_ENTRY_PRICE, 'deal-1');
+    expect(plan.rungs[0]?.price).toBeCloseTo(1905.34308, 4);
+    expect(plan.rungs[13]?.price).toBeCloseTo(2572.213158, 6);
+  });
+
+  it('SHORT prices match the independent sign-flip oracle anchor*(1+indent/100)*(1+overlap*x^L/100)', () => {
+    fc.assert(
+      fc.property(gridParamsArb, budgetArb, entryPriceArb, (grid, budget, entryPrice) => {
+        const config = buildConfig({ ...budget, grid, direction: 'short' });
+        const plan = projectGrid(config, entryPrice, 'deal');
+        for (let i = 1; i <= plan.rungs.length; i++) {
+          const x = (i - 1) / (plan.rungs.length - 1);
+          const expected =
+            entryPrice *
+            (1 + grid.indent_pct / 100) *
+            (1 + (grid.overlap_pct * Math.pow(x, grid.log_distribution)) / 100);
+          expect(plan.rungs[i - 1]?.price).toBeCloseTo(expected, 6);
+        }
+      }),
+    );
+  });
+
+  it('notional is exactly equal between LONG and SHORT for every rung (side-invariant by construction)', () => {
+    fc.assert(
+      fc.property(gridParamsArb, budgetArb, entryPriceArb, (grid, budget, entryPrice) => {
+        const longPlan = projectGrid(
+          buildConfig({ ...budget, grid, direction: 'long' }),
+          entryPrice,
+          'deal',
+        );
+        const shortPlan = projectGrid(
+          buildConfig({ ...budget, grid, direction: 'short' }),
+          entryPrice,
+          'deal',
+        );
+        for (let i = 0; i < longPlan.rungs.length; i++) {
+          // Exact equality, not toBeCloseTo — a tolerant check would miss
+          // side accidentally leaking into the weight/budget computation.
+          expect(shortPlan.rungs[i]?.notionalUsdt).toBe(longPlan.rungs[i]?.notionalUsdt);
+        }
+      }),
+    );
+  });
+
+  it('SHORT size is the derived ratio notionalUsdt / price for every rung', () => {
+    fc.assert(
+      fc.property(gridParamsArb, budgetArb, entryPriceArb, (grid, budget, entryPrice) => {
+        const config = buildConfig({ ...budget, grid, direction: 'short' });
+        const plan = projectGrid(config, entryPrice, 'deal');
+        for (const rung of plan.rungs) {
+          expect(rung.size).toBeCloseTo(rung.notionalUsdt / rung.price, 9);
+        }
+      }),
+    );
+  });
+
+  it('SHORT: sum of rung notionals equals deposit_usdt × leverage (distribution check, MVP §8)', () => {
+    fc.assert(
+      fc.property(gridParamsArb, budgetArb, entryPriceArb, (grid, budget, entryPrice) => {
+        const config = buildConfig({ ...budget, grid, direction: 'short' });
+        const plan = projectGrid(config, entryPrice, 'deal');
+        const total = plan.rungs.reduce((sum, rung) => sum + rung.notionalUsdt, 0);
+        const expectedBudget = budget.deposit_usdt * budget.leverage;
+        const relativeError = Math.abs(total - expectedBudget) / expectedBudget;
+        expect(relativeError).toBeLessThan(1e-9);
+      }),
+    );
+  });
+
+  it('sumWeights/v1 are side-invariant (direct assert against an independently-computed v1, not just LONG vs SHORT equality)', () => {
+    // AC rationale: comparing LONG's and SHORT's OUTPUT notionals to each
+    // other (the test above) would miss a bug where side leaks into the
+    // budget math but does so IDENTICALLY for both sides — this anchors
+    // rung 1's notional (= v1, since weight_1 = (1+m)^0 = 1) against v1
+    // computed independently here from the same budget/weights formula.
+    fc.assert(
+      fc.property(gridParamsArb, budgetArb, entryPriceArb, (grid, budget, entryPrice) => {
+        const weights: number[] = [];
+        for (let i = 1; i <= grid.orders; i++) {
+          weights.push(Math.pow(1 + grid.martingale_pct / 100, i - 1));
+        }
+        const sumWeights = weights.reduce((sum, w) => sum + w, 0);
+        const v1 = (budget.deposit_usdt * budget.leverage) / sumWeights;
+
+        const longPlan = projectGrid(
+          buildConfig({ ...budget, grid, direction: 'long' }),
+          entryPrice,
+          'deal',
+        );
+        const shortPlan = projectGrid(
+          buildConfig({ ...budget, grid, direction: 'short' }),
+          entryPrice,
+          'deal',
+        );
+        expect(longPlan.rungs[0]?.notionalUsdt).toBeCloseTo(v1, 6);
+        expect(shortPlan.rungs[0]?.notionalUsdt).toBeCloseTo(v1, 6);
+      }),
+    );
+  });
+});

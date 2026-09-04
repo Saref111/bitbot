@@ -169,6 +169,108 @@ describe('runDeal — happy path (MVP §5: GRID_PLACED -> ACTIVE -> SETTLING)', 
   });
 });
 
+// Sprint 4 Task B: mirrors the LONG happy path above with direction='short'.
+// Real numbers (verified against projectGrid + gridReady's stepSize
+// truncation, not guessed): twoRungConfig at entryPrice=2000,
+// direction='short' -> rung1 price=2004 (2000*1.002), real size
+// 300/2004=0.149700... truncated to stepSize 0.001 -> 0.149 (matches
+// LONG's own rung1, where the default order() amount 0.15 happens to equal
+// its truncated real size 0.150 exactly — this test makes that truncation
+// explicit rather than relying on a lucky round number). rung1's amount
+// must match the truncated real DB size exactly: reconcile's divergence
+// check compares the disappeared grid row's DB size against the observed
+// position increase, not just clientOrderId presence (confirmed by first
+// running this test with a guessed 0.15 -> "position increased by 0.001
+// more than any disappeared grid rung explains"). rung2 (2104.2, never
+// filled — stays resting until the final cancelAll) is NOT subject to
+// that check, so its mock price/size stay approximate, same as the LONG
+// test's own rung2 mock (1900/0.157 vs the real ≈1896.2/0.158).
+describe('runDeal — happy path SHORT (Sprint 4 Task B, mirrors the LONG happy path above)', () => {
+  it('SHORT: places the grid, fills rung 1, places TP from the real avg (side buy), then closes on the TP fill', async () => {
+    const db = openDatabase();
+    const config = twoRungConfig({ direction: 'short' });
+
+    const fetchOpenOrders = vi
+      .fn()
+      .mockResolvedValueOnce([
+        order({ clientOrderId: 'deal-1-1', side: 'sell', price: 2004, amount: 0.149 }),
+        order({ clientOrderId: 'deal-1-2', side: 'sell', price: 2104, amount: 0.157 }),
+      ])
+      .mockResolvedValueOnce([
+        order({ clientOrderId: 'deal-1-2', side: 'sell', price: 2104, amount: 0.157 }),
+      ]) // rung1 filled
+      .mockResolvedValueOnce([
+        order({ clientOrderId: 'deal-1-2', side: 'sell', price: 2104, amount: 0.157 }),
+        order({
+          clientOrderId: 'deal-1-tp-0',
+          side: 'buy',
+          price: 1983.96,
+          amount: 0.149,
+          reduceOnly: true,
+        }),
+      ])
+      .mockResolvedValue([
+        order({ clientOrderId: 'deal-1-2', side: 'sell', price: 2104, amount: 0.157 }),
+      ]); // TP filled
+
+    const fetchPosition = vi
+      .fn()
+      .mockResolvedValueOnce(position({ contracts: 0 }))
+      .mockResolvedValueOnce(
+        position({ contracts: 0.149, entryPrice: 2004, liquidationPrice: 3000 }),
+      )
+      .mockResolvedValueOnce(
+        position({ contracts: 0.149, entryPrice: 2004, liquidationPrice: 3000 }),
+      )
+      .mockResolvedValue(position({ contracts: 0, entryPrice: null }));
+
+    const adapter = makeMockAdapter({ fetchOpenOrders, fetchPosition });
+    let t = 1000;
+
+    const result = await runDeal({
+      adapter,
+      db,
+      config,
+      now: () => t++,
+      dealId: 'deal-1',
+      entryPrice: 2000,
+      options: { pollIntervalMs: 1 },
+    });
+
+    expect(result).toEqual({ outcome: 'closed', closeReason: 'tp' });
+    expect(adapter.cancelAll).toHaveBeenCalledWith('ETH/USDT:USDT');
+    expect(adapter.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientOrderId: 'deal-1-tp-0',
+        side: 'buy',
+        price: 2004 * 0.99,
+        amount: 0.149,
+        reduceOnly: true,
+      }),
+    );
+
+    const deal = getDeal(db, 'deal-1');
+    expect(deal?.status).toBe('SETTLING');
+    expect(deal?.closeReason).toBe('tp');
+
+    const gridOrders = getGridOrdersByDeal(db, 'deal-1');
+    expect(gridOrders.find((o) => o.rungIndex === 1)).toMatchObject({
+      status: 'filled',
+      fillPrice: 2004,
+    });
+    expect(gridOrders.find((o) => o.rungIndex === 2)).toMatchObject({ status: 'cancelled' });
+
+    const exitOrders = getExitOrdersByDeal(db, 'deal-1');
+    expect(exitOrders).toEqual([
+      expect.objectContaining({
+        clientOrderId: 'deal-1-tp-0',
+        status: 'filled',
+        price: 2004 * 0.99,
+      }),
+    ]);
+  });
+});
+
 describe('runDeal — Sprint 3 Task H: dealId child-logger binding', () => {
   it('binds dealId exactly once, and every log line across the whole lifecycle (grid open through close) carries it without any manually-added field', async () => {
     const db = openDatabase();
