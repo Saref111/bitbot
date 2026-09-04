@@ -173,3 +173,4 @@ export interface WatchOrdersLike {
 }
 
 export type BinanceProClient = InstanceType<(typeof pro)['binanceusdm']>;
+export type BybitProClient = InstanceType<(typeof pro)['bybit']>;
