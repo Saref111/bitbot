@@ -52,19 +52,37 @@ function isNoChangeNeededError(error: unknown): boolean {
   return error instanceof NoChange;
 }
 
-// PROVISIONAL — not confirmed on real Bybit, awaiting Slice C4. ccxt's
-// bybit.js exceptions.exact table (line ~705) lists retCode 12141 as
-// BadRequest with retMsg "Duplicate clientOrderId." — a plausible parallel
-// to Binance's -4116, matched the same way (numeric code substring, not
-// full message text, per binanceAdapter's own -4116 lesson). What is NOT
-// yet verified: whether Bybit actually REJECTS a duplicate orderLinkId (in
-// which case this guard is correct and crash-retry stays idempotent the
-// same way as Binance) or silently accepts/returns the existing order
-// instead (in which case this guard never fires, and the idempotency
-// story needs a different mechanism entirely). Slice C4 must confirm the
-// real behavior on testnet before this can be treated as settled.
+// CONFIRMED live on Bybit demo-testnet (Slice C4): retrying createOrder
+// with an orderLinkId already resting on the exchange throws
+// `InvalidOrder: bybit {"retCode":110072,"retMsg":"OrderLinkedID is
+// duplicate",...}` — Bybit REJECTS the duplicate (does not silently accept
+// or return the existing order), so the same idempotent-retry strategy as
+// Binance's -4116 transfers as-is; only the code differs. The Slice C2
+// provisional guess (12141, "Duplicate clientOrderId.") was wrong — that
+// code is listed in bybit.js's exceptions.exact table too, but isn't what
+// the real V5 linear-swap createOrder path actually returns; 110072 is
+// the confirmed one. Matched on the numeric code (stable identifier), not
+// the message text, per binanceAdapter's own -4116 lesson.
 function isDuplicateClientOrderIdError(error: unknown): boolean {
-  return error instanceof Error && error.message.includes('"retCode":12141');
+  return error instanceof Error && error.message.includes('"retCode":110072');
+}
+
+// CONFIRMED live on Bybit demo-testnet (Slice C4), NOT previously known:
+// unlike setPositionMode/setMarginMode, ccxt gives no typed no-change
+// class for setLeverage — bybit.js's exceptions.exact maps retCode 110043
+// ("Set leverage not modified") to the generic BadRequest, too broad to
+// catch by instanceof alone (would also swallow genuinely invalid
+// leverage values). Without this guard, calling setupSymbol twice with an
+// unchanged leverage — which happens on EVERY deal after the first one,
+// since leverage never changes between deals under a fixed config —
+// throws and crashes setupSymbol. Matched on the numeric code, same
+// convention as the other no-change/duplicate guards here. bybit.js also
+// lists sibling codes 140043/34036 for other API-version/endpoint
+// variants of the same "leverage not modified" condition — unconfirmed
+// and untouched here, since only 110043 fired on the V5 linear-swap path
+// this adapter actually uses.
+function isLeverageNoChangeError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('"retCode":110043');
 }
 
 export function createBybitAdapter(client: CcxtLike): ExchangeAdapter {
@@ -94,7 +112,11 @@ export function createBybitAdapter(client: CcxtLike): ExchangeAdapter {
       } catch (error) {
         if (!isNoChangeNeededError(error)) throw error;
       }
-      await client.setLeverage(leverage, symbol);
+      try {
+        await client.setLeverage(leverage, symbol);
+      } catch (error) {
+        if (!isLeverageNoChangeError(error)) throw error;
+      }
     },
 
     // Sprint 4 Task C, Slice C2b: resolved via MarketInfo's two

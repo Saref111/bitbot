@@ -85,6 +85,32 @@ describe('createBybitAdapter — setupSymbol', () => {
     expect(client.setLeverage).toHaveBeenCalledWith(3, 'ETH/USDT:USDT');
   });
 
+  it('treats "leverage not modified" (retCode 110043, confirmed live on Bybit demo-testnet — Slice C4) as success, not a failure', async () => {
+    const client = makeMockClient({
+      setLeverage: vi
+        .fn()
+        .mockRejectedValue(
+          new Error('bybit {"retCode":110043,"retMsg":"Set leverage not modified"}'),
+        ),
+    });
+    const adapter = createBybitAdapter(client);
+
+    await expect(adapter.setupSymbol('ETH/USDT:USDT', 3, 'cross')).resolves.toBeUndefined();
+  });
+
+  it('still throws on a genuinely different setLeverage error', async () => {
+    const client = makeMockClient({
+      setLeverage: vi
+        .fn()
+        .mockRejectedValue(new Error('bybit {"retCode":10001,"retMsg":"symbol params err"}')),
+    });
+    const adapter = createBybitAdapter(client);
+
+    await expect(adapter.setupSymbol('ETH/USDT:USDT', 3, 'cross')).rejects.toThrow(
+      /symbol params err/,
+    );
+  });
+
   it('still throws on a genuinely different setPositionMode/setMarginMode error', async () => {
     const client = makeMockClient({
       setPositionMode: vi
@@ -288,12 +314,12 @@ describe('createBybitAdapter — createOrder', () => {
     });
   });
 
-  it('PROVISIONAL (retCode 12141, not confirmed on real Bybit — Slice C4): treats a duplicate clientOrderId as idempotent success, not a failure', async () => {
+  it('CONFIRMED live on Bybit demo-testnet (Slice C4, retCode 110072): treats a duplicate orderLinkId as idempotent success, not a failure', async () => {
     const client = makeMockClient({
       createOrder: vi
         .fn()
         .mockRejectedValue(
-          new Error('bybit {"retCode":12141,"retMsg":"Duplicate clientOrderId."}'),
+          new Error('bybit {"retCode":110072,"retMsg":"OrderLinkedID is duplicate"}'),
         ),
     });
     const adapter = createBybitAdapter(client);
