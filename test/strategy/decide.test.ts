@@ -165,3 +165,88 @@ describe('decide — property invariants (MVP §6, PLAN.md Slice 3)', () => {
     );
   });
 });
+
+// Sprint 4 Task B: mirrors the LONG examples/property test above with
+// direction='short', leaving those completely untouched — SHORT TP sits
+// BELOW avgEntry (price falls -> profit), SL ABOVE (docs/SPRINT_4.md's
+// Task B AC, "дзеркало LONG"). Uses its own configArb fixed to 'short', not
+// a change to the existing LONG one.
+describe('decide — SHORT mirror (Sprint 4 Task B)', () => {
+  it('SHORT: computes takeProfitPrice = avgEntry * (1 - take_profit_pct/100)', () => {
+    const config = buildConfig({ direction: 'short', take_profit_pct: 0.9 });
+    const intent = decide({ config, filledRungsCount: 1, avgEntry: 1858.03, event: 'rung_filled' });
+    if (intent.type === 'open' || intent.type === 'safety') {
+      expect(intent.takeProfitPrice).toBeCloseTo(1858.03 * 0.991, 9);
+    } else {
+      throw new Error('expected open or safety intent');
+    }
+  });
+
+  it('SHORT: computes stopLossPrice = avgEntry * (1 + stop_loss/100) when configured', () => {
+    const config = buildConfig({ direction: 'short', stop_loss: 5 });
+    const intent = decide({ config, filledRungsCount: 1, avgEntry: 1900, event: 'rung_filled' });
+    if (intent.type === 'open' || intent.type === 'safety') {
+      expect(intent.stopLossPrice).toBeCloseTo(1900 * 1.05, 9);
+    } else {
+      throw new Error('expected open or safety intent');
+    }
+  });
+
+  it('SHORT: stopLossPrice is still null when stop_loss is not configured', () => {
+    const config = buildConfig({ direction: 'short', stop_loss: null });
+    const intent = decide({ config, filledRungsCount: 1, avgEntry: 1900, event: 'rung_filled' });
+    if (intent.type === 'open' || intent.type === 'safety') {
+      expect(intent.stopLossPrice).toBeNull();
+    } else {
+      throw new Error('expected open or safety intent');
+    }
+  });
+
+  const shortConfigArb = fc
+    .record({
+      grid: gridParamsArb,
+      take_profit_pct: fc.double({ min: 0.01, max: 20, noNaN: true }),
+      stop_loss: fc.option(fc.double({ min: 0.01, max: 50, noNaN: true }), { nil: null }),
+      direction: fc.constant('short' as const),
+    })
+    .map((overrides) => buildConfig(overrides));
+
+  it('SHORT: takeProfitPrice always equals avgEntry * (1 - take_profit_pct/100)', () => {
+    fc.assert(
+      fc.property(shortConfigArb, avgEntryArb, (config, avgEntry) => {
+        const filledRungsCount = 1;
+        const intent = decide({ config, filledRungsCount, avgEntry, event: 'rung_filled' });
+        if (intent.type !== 'open' && intent.type !== 'safety') {
+          throw new Error('expected open or safety intent');
+        }
+        const expected = avgEntry * (1 - config.take_profit_pct / 100);
+        const relativeError = Math.abs(intent.takeProfitPrice - expected) / expected;
+        expect(relativeError).toBeLessThan(1e-9);
+      }),
+    );
+  });
+
+  it('SHORT: stopLossPrice always equals avgEntry * (1 + stop_loss/100) when configured', () => {
+    fc.assert(
+      fc.property(
+        shortConfigArb.filter((config) => config.stop_loss !== null),
+        avgEntryArb,
+        (config, avgEntry) => {
+          const intent = decide({
+            config,
+            filledRungsCount: 1,
+            avgEntry,
+            event: 'rung_filled',
+          });
+          if (intent.type !== 'open' && intent.type !== 'safety') {
+            throw new Error('expected open or safety intent');
+          }
+          if (config.stop_loss === null) throw new Error('expected stop_loss to be configured');
+          const expected = avgEntry * (1 + config.stop_loss / 100);
+          const relativeError = Math.abs((intent.stopLossPrice ?? NaN) - expected) / expected;
+          expect(relativeError).toBeLessThan(1e-9);
+        },
+      ),
+    );
+  });
+});
