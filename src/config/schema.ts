@@ -44,7 +44,11 @@ export const configSchema = z
     // config.direction directly (sideSign etc.) instead of each site
     // hardcoding LONG or taking a redundant parallel parameter.
     direction: z.enum(['long', 'short']),
-    exchange: z.literal('binance-futures'),
+    // Sprint 4 Task C, Slice C3: widened from z.literal('binance-futures')
+    // to a two-value union, mirroring direction's widening in Task A —
+    // buildOrchestratorContext (main.ts) branches on this directly, no
+    // separate exchange parameter threaded alongside config.
+    exchange: z.enum(['binance-futures', 'bybit-futures']),
     testnet: z.boolean(),
 
     deposit_usdt: z.number().positive(),

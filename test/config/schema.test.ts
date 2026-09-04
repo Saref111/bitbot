@@ -117,6 +117,12 @@ describe('configSchema — valid configs', () => {
     config.direction = direction;
     expect(configSchema.safeParse(config).success).toBe(true);
   });
+
+  it.each(['binance-futures', 'bybit-futures'])('accepts exchange: %s (Sprint 4 Task C, Slice C3 widened the schema so buildOrchestratorContext can branch on config.exchange directly)', (exchange) => {
+    const config = validConfig();
+    config.exchange = exchange;
+    expect(configSchema.safeParse(config).success).toBe(true);
+  });
 });
 
 describe('configSchema — invalid configs', () => {
