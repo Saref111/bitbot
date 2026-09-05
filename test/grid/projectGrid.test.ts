@@ -5,6 +5,23 @@ import { buildConfig } from '../helpers/buildConfig.js';
 
 const SURVIVOR_ENTRY_PRICE = 1901.54;
 
+describe('projectGrid — exchange-agnostic (Sprint 4 Task C, Slice C5)', () => {
+  it('config.exchange never affects the output — projectGrid does not read it at all', () => {
+    const binancePlan = projectGrid(
+      buildConfig({ exchange: 'binance-futures' }),
+      SURVIVOR_ENTRY_PRICE,
+      'deal-1',
+    );
+    const bybitPlan = projectGrid(
+      buildConfig({ exchange: 'bybit-futures' }),
+      SURVIVOR_ENTRY_PRICE,
+      'deal-1',
+    );
+
+    expect(bybitPlan).toEqual(binancePlan);
+  });
+});
+
 describe('projectGrid — Survivor anchor point (MVP §4.1, calibrated on live orders)', () => {
   const plan = projectGrid(buildConfig(), SURVIVOR_ENTRY_PRICE, 'deal-1');
 
