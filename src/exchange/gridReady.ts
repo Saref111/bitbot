@@ -6,16 +6,25 @@ function cleanFloat(value: number, step: number): number {
   return Number(value.toFixed(decimals));
 }
 
-// ccxt's priceToPrecision uses ROUND (nearest) for Binance.
+// ccxt's priceToPrecision uses ROUND (nearest) — confirmed ccxt-unified
+// across exchanges, not a Binance-specific convention: the method is
+// defined ONLY in base/Exchange.js (priceToPrecision, ~line 6569, calling
+// decimalToPrecision(price, ROUND, ...)); neither bybit.js nor binance.js
+// declares its own priceToPrecision override (grepped both — each only
+// CALLS the inherited base method). Confirmed for Bybit, Sprint 4 Task C
+// Slice C5.
 function roundPriceToTick(price: number, tickSize: number): number {
   return cleanFloat(Math.round(price / tickSize) * tickSize, tickSize);
 }
 
-// ccxt's amountToPrecision uses TRUNCATE (down), not ROUND, for Binance —
-// matching that here (rather than rounding to nearest) keeps this
-// pre-flight minNotional check accurate to what will actually be submitted.
-// Rounding size UP instead would risk this check passing on a notional the
-// exchange then truncates back below minNotional, rejecting the real order.
+// ccxt's amountToPrecision uses TRUNCATE (down), not ROUND — same
+// ccxt-unified base/Exchange.js method (~line 6580), confirmed neither
+// bybit.js nor binance.js overrides it either (Slice C5, same grep as
+// above). Matching that here (rather than rounding to nearest) keeps this
+// pre-flight minNotional/minQty check (Slice C2b) accurate to what will
+// actually be submitted. Rounding size UP instead would risk this check
+// passing on a value the exchange then truncates back below the real
+// floor, rejecting the order.
 function truncateSizeToStep(size: number, stepSize: number): number {
   return cleanFloat(Math.floor(size / stepSize) * stepSize, stepSize);
 }
