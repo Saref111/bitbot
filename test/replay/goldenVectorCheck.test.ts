@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { compareToGoldenVector, checkMultiplicity } from '../../src/replay/goldenVectorCheck.js';
 import { requireAt } from '../../src/util/index.js';
+import { GOLDEN_VECTOR } from '../helpers/goldenVector.js';
 import type { FilterChannelCount, FilterVector } from '../../src/replay/types.js';
+
+// Sprint 4 Task C, Slice C7: the fixture values below (474/8266/21412/6066/
+// 2066/etc.) are illustrative inputs for exercising compareToGoldenVector's/
+// checkMultiplicity's own comparison LOGIC (exact match, localization,
+// fraction-invariance, tolerance boundaries) — not claims about real
+// market data, and deliberately NOT kept in sync with any real capture.
+// The one exception is the CCI 5m/1h multiplicity test below, which DOES
+// claim to use real data — it pulls from GOLDEN_VECTOR, the authoritative
+// source (test/helpers/goldenVector.ts), instead of a hardcoded copy.
 
 function channel(overrides: Partial<FilterChannelCount> = {}): FilterChannelCount {
   return {
@@ -115,8 +125,11 @@ describe('checkMultiplicity — Sprint 3 Task C, AC #2', () => {
   });
 
   it('reports the CCI 5m/1h ≈ 12 multiplicity from the real golden vector', () => {
-    const finer = channel({ indicator: 'CCI', timeframe: '5m', activeBars: 6066 });
-    const coarser = channel({ indicator: 'CCI', timeframe: '1h', activeBars: 517 });
+    // Indices 4/6 — CCI 5m and CCI 1h in GOLDEN_VECTOR's declared order
+    // (see goldenVector.ts's own doc comment: [RSI 1m, RSI 5m, RSI 30m,
+    // RSI 1h, CCI 5m, CCI 15m, CCI 1h, AND]).
+    const finer = channel({ indicator: 'CCI', timeframe: '5m', activeBars: requireAt(GOLDEN_VECTOR, 4) });
+    const coarser = channel({ indicator: 'CCI', timeframe: '1h', activeBars: requireAt(GOLDEN_VECTOR, 6) });
 
     const result = checkMultiplicity(finer, coarser, 12, 0.1);
 

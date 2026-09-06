@@ -5,6 +5,12 @@ import { compareToGoldenVector, checkMultiplicity } from '../../src/replay/golde
 import { replayWindow } from '../../src/replay/replayWindow.js';
 import { buildConfig } from '../helpers/buildConfig.js';
 import { SURVIVOR_FILTERS } from '../helpers/survivorFilters.js';
+import {
+  GOLDEN_VECTOR,
+  GOLDEN_WINDOW_BAR_COUNT,
+  GOLDEN_WINDOW_FROM_MS,
+  GOLDEN_WINDOW_TO_MS,
+} from '../helpers/goldenVector.js';
 import { requireAt } from '../../src/util/index.js';
 import type { ReplayBarResult } from '../../src/replay/types.js';
 import type { EntryFilter } from '../../src/config/types.js';
@@ -119,16 +125,10 @@ describe('computeFilterVector — Sprint 3 Task C', () => {
 
 // MVP-done.md:132-139, "Приклад-дефолт: бот Survivor" — the confirmed real
 // Survivor filter config, in the SAME order as the golden vector's own
-// declared bracket order (docs/SPRINT 3.md §2). Order here is load-bearing:
-// computeFilterVector mirrors entry_filters order verbatim, no reordering.
-// docs/SPRINT 3.md §2 — "Кількість сигналів за останній місяць" from the
-// real ExampleExchange UI, rolling 30 days, re-captured 2026-08-22/23 to match the
-// freshest window our downloaded fixtures cover (test/fixtures/binance-data
-// only has daily dumps through 2026-08-21 — today's day is never published,
-// per script.sh's own "до вчора" logic). Supersedes an earlier capture
-// (~2026-08-19) that was compared against a slightly mismatched window and
-// produced a since-resolved false RSI(30m) miss.
-const GOLDEN_VECTOR = [21164, 4083, 620, 454, 5990, 2032, 497, 7744];
+// declared bracket order (see test/helpers/goldenVector.ts, Sprint 4 Task C
+// Slice C7: GOLDEN_VECTOR's provenance comment). Order here is
+// load-bearing: computeFilterVector mirrors entry_filters order verbatim,
+// no reordering.
 
 // Tolerance is in ABSOLUTE PERCENTAGE POINTS, not relative percent (see
 // goldenVectorCheck.ts's diffChannel doc comment). Confirmed against the
@@ -146,11 +146,11 @@ describe('computeFilterVector + compareToGoldenVector — Sprint 3 Task C, real 
       config,
       csvDir,
       symbol: 'ETHUSDT',
-      fromMs: Date.UTC(2026, 6, 23, 0, 0, 0),
-      toMs: Date.UTC(2026, 7, 22, 0, 0, 0),
+      fromMs: GOLDEN_WINDOW_FROM_MS,
+      toMs: GOLDEN_WINDOW_TO_MS,
     });
 
-    expect(result.bars).toHaveLength(30 * 24 * 60); // exactly 43200 — the golden vector's own implied denominator
+    expect(result.bars).toHaveLength(GOLDEN_WINDOW_BAR_COUNT); // exactly 43200
 
     const vector = computeFilterVector(SURVIVOR_FILTERS, result.bars);
     const report = compareToGoldenVector(vector, GOLDEN_VECTOR, GOLDEN_TOLERANCE_PP);

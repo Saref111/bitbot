@@ -81,6 +81,13 @@ export function buildOrchestratorContext(
       // createBinanceFillWatcher, reused as-is: it only depends on
       // WatchOrdersLike (fillWatcher.ts), nothing Binance-specific,
       // despite the name — confirmed structurally in Slice C1/C2.
+      // WS connect/wake not yet exercised on Bybit — structurally shared
+      // with the Binance path, source-confirmed in Slice C1 (pro/bybit.js's
+      // getUrlByMarketType correctly routes to the demo private stream),
+      // but no test ever constructs a real createBybitProCcxtClient (Slice
+      // C4's mechanics test is REST-only). Degrades safely if wrong (the
+      // watcher only wakes reconcileTick early; a dead WS just falls back
+      // to plain poll cadence, not data corruption) — deferred to Task D.
       fillWatcher = createBinanceFillWatcher(createBybitProCcxtClient(credentials));
       break;
     }
