@@ -7,20 +7,15 @@ import { loadCandles } from '../../src/replay/candleCsvLoader.js';
 import { computeRsiSeries } from '../../src/indicators/index.js';
 import { buildConfig } from '../helpers/buildConfig.js';
 import { SURVIVOR_FILTERS } from '../helpers/survivorFilters.js';
+import {
+  GOLDEN_VECTOR as BINANCE_GOLDEN_VECTOR,
+  GOLDEN_WINDOW_BAR_COUNT,
+  GOLDEN_WINDOW_FROM_MS as WINDOW_FROM,
+  GOLDEN_WINDOW_TO_MS as WINDOW_TO,
+} from '../helpers/goldenVector.js';
 
 const CSV_DIR = join(import.meta.dirname, '../fixtures/bybit-data/csv');
-// Same calendar window as test/replay/filterVector.test.ts (Binance) — the
-// cross-exchange sanity check is only valid if both sides look at the same
-// period (Sprint 4 Task C §2 cross-feed discipline).
-const WINDOW_FROM = Date.UTC(2026, 6, 23, 0, 0, 0);
-const WINDOW_TO = Date.UTC(2026, 7, 22, 0, 0, 0);
 const ONE_HOUR_MS = 60 * 60_000;
-
-// Same golden vector as test/replay/filterVector.test.ts's GOLDEN_VECTOR
-// (Binance, identical window) — duplicated here rather than imported, to
-// avoid touching that file at all (Slice C6 discipline: the Binance path
-// stays untouched). If that file's vector is ever recaptured, update both.
-const BINANCE_GOLDEN_VECTOR = [21164, 4083, 620, 454, 5990, 2032, 497, 7744];
 
 // Sanity, not fidelity (docs/SPRINT_4.md Task C AC): 15 percentage points,
 // not Sprint 3's strict 2pp for the SAME-exchange Binance check — wide
@@ -67,7 +62,7 @@ describe('Bybit filter-vector sanity vs Binance-LONG golden vector — Sprint 4 
       toMs: WINDOW_TO,
     });
 
-    expect(result.bars).toHaveLength(30 * 24 * 60); // exactly 43200, same denominator as the Binance golden vector
+    expect(result.bars).toHaveLength(GOLDEN_WINDOW_BAR_COUNT); // exactly 43200, same denominator as the Binance golden vector
 
     const vector = computeFilterVector(SURVIVOR_FILTERS, result.bars);
     const report = compareToGoldenVector(vector, BINANCE_GOLDEN_VECTOR, SANITY_TOLERANCE_PP);
