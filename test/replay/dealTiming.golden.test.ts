@@ -19,7 +19,7 @@ const WINDOW_END_MS = Date.UTC(2026, 7, 20, 0, 0, 0);
 
 describe('compareDealTiming — Sprint 3 Task D, real fixture data (AC #1/#2/#3)', () => {
   it('segments the real 49-deal timeline into exactly 36 validatable deals', () => {
-    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages.html'), 'utf-8');
+    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages-long.html'), 'utf-8');
     const { events, errors } = parseTelegramEvents(html);
     expect(errors).toEqual([]);
 
@@ -36,7 +36,7 @@ describe('compareDealTiming — Sprint 3 Task D, real fixture data (AC #1/#2/#3)
   it(
     'replays the real ~44-day window and reports bitbot entry-timing vs real Survivor deal-open per deal',
     () => {
-      const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages.html'), 'utf-8');
+      const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages-long.html'), 'utf-8');
       const { events, errors } = parseTelegramEvents(html);
       expect(errors).toEqual([]);
 

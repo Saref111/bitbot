@@ -100,7 +100,7 @@ describe('reconcileExitPrices — synthetic', () => {
 
 describe('reconcileExitPrices — real fixture, all 35 take-profit-closed deals (Sprint 3 Task F)', () => {
   it('every real TP-closed deal implies an exit price within the measured tolerance of the 0.9% target', () => {
-    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages.html'), 'utf-8');
+    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages-long.html'), 'utf-8');
     const { events, errors } = parseTelegramEvents(html);
     expect(errors).toEqual([]);
 

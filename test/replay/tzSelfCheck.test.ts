@@ -20,7 +20,7 @@ function candle(openTime: number, closeTime: number): Candle {
 
 describe('checkTimezoneAlignment — Sprint 3 Task B, real fixture data (AC #4)', () => {
   it('confirms real dealOpened events sit on the UTC grid, seconds (not hours) after real Binance candle-close boundaries', () => {
-    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages.html'), 'utf-8');
+    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages-long.html'), 'utf-8');
     const { events, errors } = parseTelegramEvents(html);
     expect(errors).toEqual([]);
     const dealOpenedEvents = events.filter(
