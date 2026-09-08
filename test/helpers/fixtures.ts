@@ -22,6 +22,18 @@ export function requireMinNotional(market: MarketInfo): number {
   return market.minNotional;
 }
 
+// Sprint 4 Task C, Slice C2b: Bybit's getMarketInfo always returns
+// minNotional: null (no dollar floor) — requireMinNotional (used by every
+// Binance integration test) would throw here on purpose. Sizing on Bybit
+// goes through minQty (a contract-quantity floor), which needs no price
+// division at all — structurally simpler than Binance's notional sizing.
+export function requireMinQty(market: MarketInfo): number {
+  if (market.minQty == null) {
+    throw new Error('requireMinQty: expected a Bybit market with minQty set');
+  }
+  return market.minQty;
+}
+
 export function position(overrides: Partial<Position> = {}): Position {
   return {
     symbol: 'ETH/USDT:USDT',

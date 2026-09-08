@@ -11,7 +11,8 @@ import { getDeal } from '../../src/storage/dealRepository.js';
 import { runDeal } from '../../src/orchestrator/runDeal.js';
 import { pollUntil } from '../../src/orchestrator/pollUntil.js';
 import { buildConfig } from '../helpers/buildConfig.js';
-import type { ExchangeAdapter, MarketInfo, OpenOrder } from '../../src/exchange/types.js';
+import { requireMinQty } from '../helpers/fixtures.js';
+import type { ExchangeAdapter, FillWatcher, MarketInfo, OpenOrder } from '../../src/exchange/types.js';
 
 const SYMBOL = 'ETH/USDT:USDT';
 const BYBIT_CONFIG_PATH = new URL('../fixtures/config/bybit-testnet.yaml', import.meta.url).pathname;
@@ -35,18 +36,6 @@ function buildBybitTestAdapter(): ExchangeAdapter {
     );
   }
   return ctx.adapter;
-}
-
-// Sprint 4 Task C, Slice C2b: Bybit's getMarketInfo always returns
-// minNotional: null (no dollar floor) — requireMinNotional (used by every
-// Binance integration test) would throw here on purpose. Sizing on Bybit
-// goes through minQty (a contract-quantity floor), which needs no price
-// division at all — structurally simpler than Binance's notional sizing.
-function requireMinQty(market: MarketInfo): number {
-  if (market.minQty == null) {
-    throw new Error('requireMinQty: expected a Bybit market with minQty set');
-  }
-  return market.minQty;
 }
 
 // ccxt types client.urls loosely (effectively `any`) — narrow it for real
@@ -416,6 +405,132 @@ describe('runDeal (Bybit) — external cancel of a resting grid rung leads to HA
       // Confirms the halt came from the external rung cancel this test
       // itself performs (rung_cancelled), not a spurious position_diverged
       // — same confirmation Task B Slice B4 made for the SHORT/Binance path.
+      expect(result.reason).toMatch(/^rung_cancelled:/);
+    }
+    const deal = getDeal(db, dealId);
+    expect(deal?.status).toBe('HALTED');
+  }, 60_000);
+});
+
+describe('runDeal SHORT×Bybit — through the real WS fill-watcher (Sprint 4 Task D, the sprint\'s integration keystone)', () => {
+  let adapter: ExchangeAdapter;
+  let fillWatcher: FillWatcher;
+  let dealId: string | undefined;
+
+  // Unlike buildBybitTestAdapter() (discards the fillWatcher half of
+  // buildOrchestratorContext's return) — this test needs BOTH: the exact
+  // same real construction path main.ts uses for a live Bybit run,
+  // including `createBybitProCcxtClient` (the Slice C7 gap). The dedicated
+  // bybitFillWatcher.test.ts proves the WS itself wakes on a fill in
+  // isolation (a resolved promise, unambiguous); this test proves the
+  // SHORT deal-machine behaves correctly when wired to that same real
+  // watcher end-to-end, mirroring Task B Slice B4 (SHORT/Binance) and this
+  // file's own LONG×Bybit test above, combined on the one axis neither
+  // covered alone.
+  beforeAll(() => {
+    const { ctx, fillWatcher: fw, network } = buildOrchestratorContext(BYBIT_CONFIG_PATH, ':memory:');
+    if (network !== 'testnet') {
+      throw new Error(
+        'Refusing to run integration tests against a non-testnet Bybit account (BYBIT_TESTNET must be "true")',
+      );
+    }
+    adapter = ctx.adapter;
+    fillWatcher = fw;
+  });
+
+  // Rung 1 is deliberately marketable to force a real fill, so this test
+  // leaves a real (tiny) SHORT position + resting orders on the demo
+  // account — clean up regardless of pass/fail. Direction hardcoded
+  // ('buy' closes a short), same B4 lesson as the Binance/SHORT test:
+  // cleanup must not depend on position.side when side is partly what's
+  // under test.
+  afterAll(async () => {
+    if (!dealId) return;
+    await adapter.cancelAll(SYMBOL);
+    const position = await adapter.fetchPosition(SYMBOL);
+    if (position.contracts > 0) {
+      await adapter.createOrder({
+        symbol: SYMBOL,
+        side: 'buy',
+        type: 'market',
+        amount: position.contracts,
+        clientOrderId: `${dealId}-cleanup`,
+        reduceOnly: true,
+      });
+    }
+  });
+
+  it('reaches ACTIVE on a forced SHORT fill, then HALTs once a live grid rung is cancelled out from under it', async () => {
+    dealId = `bitbot-bys-${String(Date.now())}`;
+
+    const candles = await adapter.fetchOHLCV(SYMBOL, '1m', undefined, 1);
+    const lastClose = candles.at(-1)?.close;
+    if (lastClose === undefined) throw new Error('no candle to derive entryPrice from');
+
+    // 2% below last close (mirrors the Binance/SHORT-B4 pattern): rung 1
+    // still lands comfortably above the real bid for a SHORT sell, forcing
+    // an immediate fill.
+    const entryPrice = lastClose * 0.98;
+
+    const config = buildConfig({
+      direction: 'short',
+      exchange: 'bybit-futures',
+      deposit_usdt: 50,
+      leverage: 2,
+      grid: {
+        orders: 2,
+        overlap_pct: 5,
+        indent_pct: 0.2,
+        martingale_pct: 0,
+        log_distribution: 1,
+        partial_placement: null,
+        runaway_cancel_pct: 5, // wide enough that this test's timing never trips it
+      },
+      take_profit_pct: 0.5,
+      stop_loss: null,
+    });
+
+    const db = openDatabase();
+
+    const rung2ClientOrderId = `${dealId}-2`;
+    setTimeout(() => {
+      void adapter.cancelOrder(SYMBOL, rung2ClientOrderId).catch(() => {
+        // Ignore — if it already got cleaned up some other way, the
+        // reconcile loop's confirmation-gate is what we're actually testing.
+      });
+    }, 4000);
+
+    const shortPositionObserved = pollUntil(
+      async () => {
+        const position = await adapter.fetchPosition(SYMBOL);
+        return position.contracts > 0 ? position : null;
+      },
+      { intervalMs: 1000, timeoutMs: 20_000 },
+    );
+
+    const [result, observedPosition] = await Promise.all([
+      runDeal({
+        adapter,
+        db,
+        config,
+        now: () => Date.now(),
+        dealId,
+        entryPrice,
+        options: { pollIntervalMs: 1500, haltConfirmationTicks: 2, fillWatcher },
+      }),
+      shortPositionObserved,
+    ]);
+
+    console.log('[Task D] real SHORT×Bybit adapter.fetchPosition():', observedPosition);
+    expect(observedPosition.contracts).toBeGreaterThanOrEqual(0);
+    expect(observedPosition.side).toBe('short');
+
+    console.log('[Task D] runDeal result:', result);
+    expect(result.outcome).toBe('halted');
+    if (result.outcome === 'halted') {
+      // Same confirmation as every other rung-cancel HALT test in this
+      // file: the halt came from THIS test's own external cancel
+      // (rung_cancelled), not a spurious position_diverged.
       expect(result.reason).toMatch(/^rung_cancelled:/);
     }
     const deal = getDeal(db, dealId);

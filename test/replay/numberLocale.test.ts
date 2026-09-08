@@ -4,7 +4,7 @@ import { parseLocaleNumber } from '../../src/replay/numberLocale.js';
 
 describe('parseLocaleNumber — Sprint 3 Task B (ExampleExchange locale: comma decimal, U+00A0 thousands)', () => {
   it('parses a confirmed real value with a thousands separator', () => {
-    // Real value from test/fixtures/telegram-data/messages.html (deal
+    // Real value from test/fixtures/telegram-data/messages-long.html (deal
     // d1169434698's orderFilled "Середня ціна"). \u00A0 confirmed via hex dump as the
     // actual separator byte, not a plain space.
     expect(parseLocaleNumber('1\u00A0778,05')).toBeCloseTo(1778.05, 9);
