@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { OrderNotFound } from 'ccxt';
-import { createBinanceAdapter } from '../../src/exchange/binanceAdapter.js';
+import { MarginModeAlreadySet, NoChange, OrderNotFound } from 'ccxt';
+import { createBybitAdapter } from '../../src/exchange/bybitAdapter.js';
 import { OrderNotFoundError } from '../../src/exchange/errors.js';
 import type { CcxtLike } from '../../src/exchange/types.js';
 
@@ -24,46 +24,91 @@ function makeMockClient(overrides: Partial<CcxtLike> = {}): CcxtLike {
   };
 }
 
-describe('createBinanceAdapter — setupSymbol', () => {
+describe('createBybitAdapter — setupSymbol', () => {
   it('loads markets, then sets one-way position mode, margin mode, then leverage, in that order', async () => {
     const client = makeMockClient();
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await adapter.setupSymbol('ETH/USDT:USDT', 3, 'cross');
 
     expect(client.loadMarkets).toHaveBeenCalled();
+    // Watch-point #1b: this asserts only that the adapter INVOKES
+    // setPositionMode with the right (hedged=false, symbol) arguments —
+    // ccxt's bybit.js is responsible for turning that into mode=0 on the
+    // wire (bybit.js:7284-7317). Whether the account actually ends up in
+    // one-way mode cannot be proven by a unit test; that's Slice C4.
     expect(client.setPositionMode).toHaveBeenCalledWith(false, 'ETH/USDT:USDT');
     expect(client.setMarginMode).toHaveBeenCalledWith('cross', 'ETH/USDT:USDT');
     expect(client.setLeverage).toHaveBeenCalledWith(3, 'ETH/USDT:USDT');
   });
 
-  it('treats "No need to change position side" as success, not a failure', async () => {
+  it('treats NoChange (position mode) as success, not a failure', async () => {
     const client = makeMockClient({
       setPositionMode: vi
         .fn()
         .mockRejectedValue(
-          new Error('binanceusdm {"code":-4059,"msg":"No need to change position side."}'),
+          new NoChange('bybit {"retCode":110025,"retMsg":"Position mode is not modified"}'),
         ),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await expect(adapter.setupSymbol('ETH/USDT:USDT', 3, 'cross')).resolves.toBeUndefined();
     expect(client.setMarginMode).toHaveBeenCalledWith('cross', 'ETH/USDT:USDT');
     expect(client.setLeverage).toHaveBeenCalledWith(3, 'ETH/USDT:USDT');
   });
 
-  it('treats "No need to change margin type" as success, not a failure', async () => {
+  it('treats MarginModeAlreadySet as success too — it is a NoChange subclass (base/errors.js:68,74), not a separate code branch', async () => {
     const client = makeMockClient({
       setMarginMode: vi
         .fn()
         .mockRejectedValue(
-          new Error('binanceusdm {"code":-4046,"msg":"No need to change margin type."}'),
+          new MarginModeAlreadySet(
+            'bybit {"retCode":110026,"retMsg":"Cross/isolated margin mode is not modified"}',
+          ),
         ),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await expect(adapter.setupSymbol('ETH/USDT:USDT', 3, 'cross')).resolves.toBeUndefined();
     expect(client.setLeverage).toHaveBeenCalledWith(3, 'ETH/USDT:USDT');
+  });
+
+  it('treats NoChange (margin) as success too, not just MarginModeAlreadySet', async () => {
+    const client = makeMockClient({
+      setMarginMode: vi
+        .fn()
+        .mockRejectedValue(new NoChange('bybit {"retCode":110027,"retMsg":"Margin is not modified"}')),
+    });
+    const adapter = createBybitAdapter(client);
+
+    await expect(adapter.setupSymbol('ETH/USDT:USDT', 3, 'cross')).resolves.toBeUndefined();
+    expect(client.setLeverage).toHaveBeenCalledWith(3, 'ETH/USDT:USDT');
+  });
+
+  it('treats "leverage not modified" (retCode 110043, confirmed live on Bybit demo-testnet — Slice C4) as success, not a failure', async () => {
+    const client = makeMockClient({
+      setLeverage: vi
+        .fn()
+        .mockRejectedValue(
+          new Error('bybit {"retCode":110043,"retMsg":"Set leverage not modified"}'),
+        ),
+    });
+    const adapter = createBybitAdapter(client);
+
+    await expect(adapter.setupSymbol('ETH/USDT:USDT', 3, 'cross')).resolves.toBeUndefined();
+  });
+
+  it('still throws on a genuinely different setLeverage error', async () => {
+    const client = makeMockClient({
+      setLeverage: vi
+        .fn()
+        .mockRejectedValue(new Error('bybit {"retCode":10001,"retMsg":"symbol params err"}')),
+    });
+    const adapter = createBybitAdapter(client);
+
+    await expect(adapter.setupSymbol('ETH/USDT:USDT', 3, 'cross')).rejects.toThrow(
+      /symbol params err/,
+    );
   });
 
   it('still throws on a genuinely different setPositionMode/setMarginMode error', async () => {
@@ -71,40 +116,40 @@ describe('createBinanceAdapter — setupSymbol', () => {
       setPositionMode: vi
         .fn()
         .mockRejectedValue(
-          new Error(
-            'binanceusdm {"code":-1021,"msg":"Timestamp for this request is outside of the recvWindow."}',
-          ),
+          new Error('bybit {"retCode":10001,"retMsg":"symbol params err"}'),
         ),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
-    await expect(adapter.setupSymbol('ETH/USDT:USDT', 3, 'cross')).rejects.toThrow(/recvWindow/);
+    await expect(adapter.setupSymbol('ETH/USDT:USDT', 3, 'cross')).rejects.toThrow(
+      /symbol params err/,
+    );
   });
 });
 
-describe('createBinanceAdapter — getMarketInfo', () => {
+describe('createBybitAdapter — getMarketInfo (Slice C2b: resolved via minQty, see types.ts/gridReady.ts)', () => {
   it('loads markets before reading market(), so it works right after construction', async () => {
     const client = makeMockClient({
       market: vi.fn().mockReturnValue({
         precision: { price: 0.01, amount: 0.001 },
-        limits: { cost: { min: 5 } },
+        limits: { cost: { min: 5 }, amount: { min: 0.01 } },
       }),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await adapter.getMarketInfo('ETH/USDT:USDT');
 
     expect(client.loadMarkets).toHaveBeenCalled();
   });
 
-  it('maps precision.price/amount and limits.cost.min to tickSize/stepSize/minNotional; minQty stays null (Binance has no separate quantity floor)', async () => {
+  it('maps precision.price/amount to tickSize/stepSize and limits.amount.min to minQty; minNotional is always null (Bybit has no dollar floor — Slice C2b)', async () => {
     const client = makeMockClient({
       market: vi.fn().mockReturnValue({
         precision: { price: 0.01, amount: 0.001 },
-        limits: { cost: { min: 5 } },
+        limits: { cost: { min: undefined }, amount: { min: 0.01 } },
       }),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     const info = await adapter.getMarketInfo('ETH/USDT:USDT');
 
@@ -112,27 +157,30 @@ describe('createBinanceAdapter — getMarketInfo', () => {
       symbol: 'ETH/USDT:USDT',
       tickSize: 0.01,
       stepSize: 0.001,
-      minNotional: 5,
-      minQty: null,
+      minNotional: null,
+      minQty: 0.01,
     });
   });
 
-  it('throws when market info is incomplete', async () => {
+  it('throws when limits.amount.min is missing too — the real Bybit-side floor, not a silent default (Slice C2b: STOP-and-report discipline, same as C2)', async () => {
     const client = makeMockClient({
-      market: vi.fn().mockReturnValue({ precision: { price: 0.01 }, limits: {} }),
+      market: vi.fn().mockReturnValue({
+        precision: { price: 0.01, amount: 0.001 },
+        limits: { cost: { min: undefined }, amount: { min: undefined } },
+      }),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await expect(adapter.getMarketInfo('ETH/USDT:USDT')).rejects.toThrow(/incomplete market info/);
   });
 });
 
-describe('createBinanceAdapter — fetchOHLCV', () => {
+describe('createBybitAdapter — fetchOHLCV', () => {
   it('maps ccxt OHLCV tuples to Candle objects with a derived closeTime', async () => {
     const client = makeMockClient({
       fetchOHLCV: vi.fn().mockResolvedValue([[1_000, 100, 105, 95, 102, 10]]),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     const candles = await adapter.fetchOHLCV('ETH/USDT:USDT', '1m');
 
@@ -145,16 +193,16 @@ describe('createBinanceAdapter — fetchOHLCV', () => {
     const client = makeMockClient({
       fetchOHLCV: vi.fn().mockResolvedValue([[1_000, 100, undefined, 95, 102, 10]]),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await expect(adapter.fetchOHLCV('ETH/USDT:USDT', '1m')).rejects.toThrow(/incomplete OHLCV/);
   });
 });
 
-describe('createBinanceAdapter — fetchPosition', () => {
-  it('calls fetchPositions (plural) with the symbol, not fetchPosition (singular)', async () => {
+describe('createBybitAdapter — fetchPosition (watch-point #1, confirmed via bybit.js:6985,7081)', () => {
+  it('calls fetchPositions (plural) with the symbol', async () => {
     const client = makeMockClient({ fetchPositions: vi.fn().mockResolvedValue([]) });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await adapter.fetchPosition('ETH/USDT:USDT');
 
@@ -163,7 +211,7 @@ describe('createBinanceAdapter — fetchPosition', () => {
 
   it('reports side=null and contracts=0 when flat (empty positions array)', async () => {
     const client = makeMockClient({ fetchPositions: vi.fn().mockResolvedValue([]) });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     expect(await adapter.fetchPosition('ETH/USDT:USDT')).toEqual({
       symbol: 'ETH/USDT:USDT',
@@ -180,7 +228,7 @@ describe('createBinanceAdapter — fetchPosition', () => {
         .fn()
         .mockResolvedValue([{ symbol: 'ETH/USDT:USDT', contracts: 0, side: undefined }]),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     expect(await adapter.fetchPosition('ETH/USDT:USDT')).toEqual({
       symbol: 'ETH/USDT:USDT',
@@ -203,7 +251,7 @@ describe('createBinanceAdapter — fetchPosition', () => {
         },
       ]),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     expect(await adapter.fetchPosition('ETH/USDT:USDT')).toEqual({
       symbol: 'ETH/USDT:USDT',
@@ -215,14 +263,14 @@ describe('createBinanceAdapter — fetchPosition', () => {
   });
 });
 
-describe('createBinanceAdapter — createOrder', () => {
+describe('createBybitAdapter — createOrder', () => {
   it('passes clientOrderId through params and maps the response', async () => {
     const client = makeMockClient({
       createOrder: vi
         .fn()
         .mockResolvedValue({ id: 'ex-1', clientOrderId: 'deal-1-1', status: 'open' }),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     const result = await adapter.createOrder({
       symbol: 'ETH/USDT:USDT',
@@ -248,7 +296,7 @@ describe('createBinanceAdapter — createOrder', () => {
     const client = makeMockClient({
       createOrder: vi.fn().mockResolvedValue({ id: 'ex-2', clientOrderId: 'tp-1', status: 'open' }),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await adapter.createOrder({
       symbol: 'ETH/USDT:USDT',
@@ -266,15 +314,15 @@ describe('createBinanceAdapter — createOrder', () => {
     });
   });
 
-  it('treats a duplicate clientOrderId (-4116, verified on testnet) as idempotent success, not a failure (Slice 9: crash-retry after createOrder but before the DB write commits)', async () => {
+  it('CONFIRMED live on Bybit demo-testnet (Slice C4, retCode 110072): treats a duplicate orderLinkId as idempotent success, not a failure', async () => {
     const client = makeMockClient({
       createOrder: vi
         .fn()
         .mockRejectedValue(
-          new Error('binanceusdm {"code":-4116,"msg":"ClientOrderId is duplicated."}'),
+          new Error('bybit {"retCode":110072,"retMsg":"OrderLinkedID is duplicate"}'),
         ),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     const result = await adapter.createOrder({
       symbol: 'ETH/USDT:USDT',
@@ -292,9 +340,11 @@ describe('createBinanceAdapter — createOrder', () => {
     const client = makeMockClient({
       createOrder: vi
         .fn()
-        .mockRejectedValue(new Error('binanceusdm {"code":-2019,"msg":"Margin is insufficient."}')),
+        .mockRejectedValue(
+          new Error('bybit {"retCode":110007,"retMsg":"Insufficient available balance."}'),
+        ),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await expect(
       adapter.createOrder({
@@ -305,11 +355,11 @@ describe('createBinanceAdapter — createOrder', () => {
         price: 1897.74,
         clientOrderId: 'deal-1-1',
       }),
-    ).rejects.toThrow(/Margin is insufficient/);
+    ).rejects.toThrow(/Insufficient available balance/);
   });
 });
 
-describe('createBinanceAdapter — fetchOpenOrders / cancelAll', () => {
+describe('createBybitAdapter — fetchOpenOrders / cancelAll', () => {
   it('maps open orders', async () => {
     const client = makeMockClient({
       fetchOpenOrders: vi.fn().mockResolvedValue([
@@ -325,7 +375,7 @@ describe('createBinanceAdapter — fetchOpenOrders / cancelAll', () => {
         },
       ]),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     expect(await adapter.fetchOpenOrders('ETH/USDT:USDT')).toEqual([
       {
@@ -343,7 +393,7 @@ describe('createBinanceAdapter — fetchOpenOrders / cancelAll', () => {
 
   it('cancelAll calls cancelAllOrders for the symbol', async () => {
     const client = makeMockClient();
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await adapter.cancelAll('ETH/USDT:USDT');
 
@@ -351,23 +401,23 @@ describe('createBinanceAdapter — fetchOpenOrders / cancelAll', () => {
   });
 });
 
-describe('createBinanceAdapter — cancelOrder', () => {
-  it('cancels by clientOrderId via params, not the positional id', async () => {
+describe('createBybitAdapter — cancelOrder (orderLinkId, not origClientOrderId — bybit.js:4863-4885)', () => {
+  it('cancels by clientOrderId via params.orderLinkId, not the positional id', async () => {
     const client = makeMockClient();
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await adapter.cancelOrder('ETH/USDT:USDT', 'deal-1-tp');
 
     expect(client.cancelOrder).toHaveBeenCalledWith('', 'ETH/USDT:USDT', {
-      origClientOrderId: 'deal-1-tp',
+      orderLinkId: 'deal-1-tp',
     });
   });
 
-  it('maps ccxt OrderNotFound to the adapter-level OrderNotFoundError (Slice 9: reprice race tolerance)', async () => {
+  it('maps ccxt OrderNotFound (retCode 110001, same unified class as Binance) to the adapter-level OrderNotFoundError', async () => {
     const client = makeMockClient({
-      cancelOrder: vi.fn().mockRejectedValue(new OrderNotFound('binanceusdm order does not exist')),
+      cancelOrder: vi.fn().mockRejectedValue(new OrderNotFound('bybit order does not exist')),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await expect(adapter.cancelOrder('ETH/USDT:USDT', 'deal-1-tp')).rejects.toThrow(
       OrderNotFoundError,
@@ -378,7 +428,7 @@ describe('createBinanceAdapter — cancelOrder', () => {
     const client = makeMockClient({
       cancelOrder: vi.fn().mockRejectedValue(new Error('network error')),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     await expect(adapter.cancelOrder('ETH/USDT:USDT', 'deal-1-tp')).rejects.toThrow(
       /network error/,
@@ -386,12 +436,12 @@ describe('createBinanceAdapter — cancelOrder', () => {
   });
 });
 
-describe('createBinanceAdapter — fetchFundingRate', () => {
+describe('createBybitAdapter — fetchFundingRate (emulated under the hood, transparent here)', () => {
   it('maps fundingRate and fundingTimestamp', async () => {
     const client = makeMockClient({
       fetchFundingRate: vi.fn().mockResolvedValue({ fundingRate: 0.0001, fundingTimestamp: 123 }),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     expect(await adapter.fetchFundingRate('ETH/USDT:USDT')).toEqual({
       fundingRate: 0.0001,
@@ -400,7 +450,7 @@ describe('createBinanceAdapter — fetchFundingRate', () => {
   });
 });
 
-describe('createBinanceAdapter — fetchTrades (Slice 10: NET)', () => {
+describe('createBybitAdapter — fetchTrades', () => {
   it('maps side/price/amount/cost/fee/takerOrMaker and passes since through', async () => {
     const fetchMyTrades = vi.fn().mockResolvedValue([
       {
@@ -423,7 +473,7 @@ describe('createBinanceAdapter — fetchTrades (Slice 10: NET)', () => {
       },
     ]);
     const client = makeMockClient({ fetchMyTrades });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     const trades = await adapter.fetchTrades('ETH/USDT:USDT', 1000);
 
@@ -466,21 +516,21 @@ describe('createBinanceAdapter — fetchTrades (Slice 10: NET)', () => {
         },
       ]),
     });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     const [trade] = await adapter.fetchTrades('ETH/USDT:USDT', 1000);
     expect(trade?.takerOrMaker).toBe('unknown');
   });
 });
 
-describe('createBinanceAdapter — fetchFundingHistory (Slice 10: NET)', () => {
+describe('createBybitAdapter — fetchFundingHistory', () => {
   it('maps timestamp/amount and passes since + a generous explicit limit through', async () => {
     const fetchFundingHistory = vi.fn().mockResolvedValue([
-      { timestamp: 1500, amount: -0.05 }, // long paying funding — the common case
+      { timestamp: 1500, amount: -0.05 },
       { timestamp: 30000, amount: 0.02 },
     ]);
     const client = makeMockClient({ fetchFundingHistory });
-    const adapter = createBinanceAdapter(client);
+    const adapter = createBybitAdapter(client);
 
     const history = await adapter.fetchFundingHistory('ETH/USDT:USDT', 1000);
 

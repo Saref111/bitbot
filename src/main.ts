@@ -3,6 +3,10 @@ import {
   createBinanceCcxtClient,
   createBinanceFillWatcher,
   createBinanceProCcxtClient,
+  createBybitAdapter,
+  createBybitCcxtClient,
+  createBybitProCcxtClient,
+  loadBybitCredentials,
   loadExchangeCredentials,
 } from './exchange/index.js';
 import { loadConfigFromFile } from './config/index.js';
@@ -20,7 +24,7 @@ import {
   recoverDeal,
   waitAndOpenDeal,
 } from './orchestrator/index.js';
-import type { FillWatcher } from './exchange/index.js';
+import type { ExchangeAdapter, FillWatcher } from './exchange/index.js';
 import type {
   OrchestratorContext,
   RecoverDealResult,
@@ -28,6 +32,10 @@ import type {
 } from './orchestrator/index.js';
 
 export type Network = 'testnet' | 'mainnet';
+
+function assertNever(value: never): never {
+  throw new Error(`buildOrchestratorContext: unhandled exchange: ${String(value)}`);
+}
 
 /**
  * Real bootstrap — file/env I/O, constructs real ccxt clients. Not unit
@@ -45,11 +53,47 @@ export function buildOrchestratorContext(
   logFilePath?: string,
 ): { ctx: OrchestratorContext; fillWatcher: FillWatcher; network: Network } {
   const config = loadConfigFromFile(configPath);
-  const credentials = loadExchangeCredentials();
-  const network: Network = credentials.testnet ? 'testnet' : 'mainnet';
 
-  const adapter = createBinanceAdapter(createBinanceCcxtClient(credentials));
-  const fillWatcher = createBinanceFillWatcher(createBinanceProCcxtClient(credentials));
+  // Sprint 4 Task C, Slice C3: reads config.exchange directly at this one
+  // construction point, rather than threading a separate exchange
+  // parameter through buildOrchestratorContext — config is already in
+  // scope here, same reasoning as Task A's direction widening. No runtime
+  // guard needed for the new 'bybit-futures' branch (unlike Task A's
+  // direction guard): that guard existed because the deal-state machine
+  // was mid-refactor between slices; here 'bybit-futures' routes to a
+  // complete, unit-tested adapter (Slices C2/C2b) — the only thing not yet
+  // proven is real-testnet mechanics (Slice C4), not a half-wired state.
+  let adapter: ExchangeAdapter;
+  let fillWatcher: FillWatcher;
+  let network: Network;
+  switch (config.exchange) {
+    case 'binance-futures': {
+      const credentials = loadExchangeCredentials();
+      network = credentials.testnet ? 'testnet' : 'mainnet';
+      adapter = createBinanceAdapter(createBinanceCcxtClient(credentials));
+      fillWatcher = createBinanceFillWatcher(createBinanceProCcxtClient(credentials));
+      break;
+    }
+    case 'bybit-futures': {
+      const credentials = loadBybitCredentials();
+      network = credentials.testnet ? 'testnet' : 'mainnet';
+      adapter = createBybitAdapter(createBybitCcxtClient(credentials));
+      // createBinanceFillWatcher, reused as-is: it only depends on
+      // WatchOrdersLike (fillWatcher.ts), nothing Binance-specific,
+      // despite the name — confirmed structurally in Slice C1/C2.
+      // WS connect/wake not yet exercised on Bybit — structurally shared
+      // with the Binance path, source-confirmed in Slice C1 (pro/bybit.js's
+      // getUrlByMarketType correctly routes to the demo private stream),
+      // but no test ever constructs a real createBybitProCcxtClient (Slice
+      // C4's mechanics test is REST-only). Degrades safely if wrong (the
+      // watcher only wakes reconcileTick early; a dead WS just falls back
+      // to plain poll cadence, not data corruption) — deferred to Task D.
+      fillWatcher = createBinanceFillWatcher(createBybitProCcxtClient(credentials));
+      break;
+    }
+    default:
+      assertNever(config.exchange);
+  }
 
   const db = openDatabase(dbPath);
   const level = resolveLogLevel({

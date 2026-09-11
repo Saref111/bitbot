@@ -15,6 +15,11 @@ import type { ExitTargetMutation, ReconcileExitTargetsParams } from './types.js'
  *
  * Returns DB mutations rather than writing them (PLAN.md: one transaction
  * per tick, applied by the caller alongside everything else from that tick).
+ *
+ * Sprint 4 Task A: exit side is `sell` for long, `buy` for short — driven by
+ * `config.direction`, shared for both tp and sl through this one call (not
+ * by exit type). The price itself already carries the correct sign from
+ * decide.ts; this only picks which side closes the position.
  */
 export async function reconcileExitTargets(
   params: ReconcileExitTargetsParams,
@@ -30,6 +35,7 @@ export async function reconcileExitTargets(
     allExitOrders,
     now,
   } = params;
+  const exitSide = config.direction === 'long' ? 'sell' : 'buy';
 
   const desiredByType: Record<ExitOrderRow['type'], number | null> = {
     tp: desiredTakeProfitPrice,
@@ -55,7 +61,7 @@ export async function reconcileExitTargets(
     const newClientOrderId = `${dealId}-${row.type}-${String(priorCount)}`;
     await adapter.createOrder({
       symbol: config.symbol,
-      side: 'sell',
+      side: exitSide,
       type: 'limit',
       amount: positionContracts,
       price: desired,

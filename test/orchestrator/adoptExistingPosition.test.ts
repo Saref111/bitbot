@@ -128,6 +128,7 @@ describe('adoptExistingPosition — minimal adoption (MVP §9: TP/SL only, no re
     expect(adapter.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
         clientOrderId: 'deal-1-tp-0',
+        side: 'sell',
         price: 2000 * 1.01,
         amount: 0.05,
         reduceOnly: true,
@@ -197,7 +198,119 @@ describe('adoptExistingPosition — minimal adoption (MVP §9: TP/SL only, no re
     expect(adapter.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
         clientOrderId: 'deal-1-sl-0',
+        side: 'sell',
         price: 2000 * 0.95,
+        reduceOnly: true,
+      }),
+    );
+  });
+
+  // Sprint 4 Task B: mirrors the two LONG tests above with direction='short'
+  // — TP below avgEntry (side buy), SL above (side buy). adoptExistingPosition
+  // never calls the real projectGrid (MVP §9: no reconstructed grid), so
+  // these fixtures are fully self-contained mock values, same as LONG's.
+  it('SHORT: seeds a synthetic filled rung, places TP from it (side buy), and drives the deal to a close (Sprint 4 Task B)', async () => {
+    const db = openDatabase();
+    const config = buildConfig({
+      direction: 'short',
+      include_existing_position: true,
+      take_profit_pct: 1,
+      stop_loss: null,
+    });
+
+    const fetchPosition = vi
+      .fn()
+      .mockResolvedValueOnce(
+        position({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 3000 }),
+      )
+      .mockResolvedValueOnce(
+        position({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 3000 }),
+      )
+      .mockResolvedValue(position({ contracts: 0, entryPrice: null }));
+
+    const fetchOpenOrders = vi
+      .fn()
+      .mockResolvedValueOnce([order({ side: 'buy', price: 2000 * 0.99, amount: 0.05 })])
+      .mockResolvedValue([]); // TP filled -> closes
+
+    const adapter = makeMockAdapter({ fetchPosition, fetchOpenOrders });
+    let t = 1000;
+
+    const result = await adoptExistingPosition({
+      adapter,
+      db,
+      config,
+      now: () => t++,
+      dealId: 'deal-1',
+      options: { pollIntervalMs: 1 },
+    });
+
+    expect(result).toEqual({ outcome: 'closed', closeReason: 'tp' });
+    expect(adapter.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientOrderId: 'deal-1-tp-0',
+        side: 'buy',
+        price: 2000 * 0.99,
+        amount: 0.05,
+        reduceOnly: true,
+      }),
+    );
+
+    const deal = getDeal(db, 'deal-1');
+    expect(deal?.status).toBe('SETTLING');
+    expect(deal?.closeReason).toBe('tp');
+    expect(deal?.pEntry).toBeCloseTo(2000, 9);
+
+    const exitOrders = getExitOrdersByDeal(db, 'deal-1');
+    expect(exitOrders[0]).toMatchObject({ clientOrderId: 'deal-1-tp-0', status: 'filled' });
+  });
+
+  it('SHORT: also places SL (side buy) when config.stop_loss is set (Sprint 4 Task B)', async () => {
+    const db = openDatabase();
+    const config = buildConfig({
+      direction: 'short',
+      include_existing_position: true,
+      take_profit_pct: 1,
+      stop_loss: 5,
+    });
+
+    const fetchOpenOrders = vi
+      .fn()
+      .mockResolvedValueOnce([
+        order({ clientOrderId: 'deal-1-tp-0', side: 'buy', price: 2000 * 0.99, amount: 0.05 }),
+        order({ clientOrderId: 'deal-1-sl-0', side: 'buy', price: 2000 * 1.05, amount: 0.05 }),
+      ])
+      .mockResolvedValue([
+        order({ clientOrderId: 'deal-1-sl-0', side: 'buy', price: 2000 * 1.05, amount: 0.05 }),
+      ]);
+    const fetchPosition = vi
+      .fn()
+      .mockResolvedValueOnce(
+        position({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 3000 }),
+      )
+      .mockResolvedValueOnce(
+        position({ contracts: 0.05, entryPrice: 2000, liquidationPrice: 3000 }),
+      )
+      .mockResolvedValue(position({ contracts: 0, entryPrice: null }));
+
+    const adapter = makeMockAdapter({ fetchPosition, fetchOpenOrders });
+    let t = 1000;
+
+    const result = await adoptExistingPosition({
+      adapter,
+      db,
+      config,
+      now: () => t++,
+      dealId: 'deal-1',
+      options: { pollIntervalMs: 1 },
+    });
+
+    expect(result).toEqual({ outcome: 'closed', closeReason: 'tp' });
+    expect(adapter.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientOrderId: 'deal-1-sl-0',
+        side: 'buy',
+        price: 2000 * 1.05,
         reduceOnly: true,
       }),
     );

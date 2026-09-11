@@ -111,6 +111,18 @@ describe('configSchema — valid configs', () => {
     config.entry_filters = [{ indicator: 'MACD', timeframe: '1h', period: 14, op: '<', value: 55 }];
     expect(configSchema.safeParse(config).success).toBe(true);
   });
+
+  it.each(['long', 'short'])('accepts direction: %s (Sprint 4 Task A widened the schema so grid/strategy math can thread config.direction directly — SHORT behavior itself is still unvalidated until Task B)', (direction) => {
+    const config = validConfig();
+    config.direction = direction;
+    expect(configSchema.safeParse(config).success).toBe(true);
+  });
+
+  it.each(['binance-futures', 'bybit-futures'])('accepts exchange: %s (Sprint 4 Task C, Slice C3 widened the schema so buildOrchestratorContext can branch on config.exchange directly)', (exchange) => {
+    const config = validConfig();
+    config.exchange = exchange;
+    expect(configSchema.safeParse(config).success).toBe(true);
+  });
 });
 
 describe('configSchema — invalid configs', () => {
@@ -214,14 +226,6 @@ describe('configSchema — invalid configs', () => {
   it('rejects invalid direction enum value', () => {
     const config = validConfig();
     config.direction = 'up';
-    const result = configSchema.safeParse(config);
-    expect(result.success).toBe(false);
-    expect(messages(result).join('\n')).toMatch(/direction/);
-  });
-
-  it('rejects direction: short (not implemented yet — MVP scope is long only)', () => {
-    const config = validConfig();
-    config.direction = 'short';
     const result = configSchema.safeParse(config);
     expect(result.success).toBe(false);
     expect(messages(result).join('\n')).toMatch(/direction/);

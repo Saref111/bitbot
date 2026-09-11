@@ -156,7 +156,7 @@ export interface MultiplicityCheck {
   withinTolerance: boolean;
 }
 
-/** Sprint 3 Task C, AC #4 (per-bar spot-check): one row per DISTINCT native-timeframe bar of the chosen filter — the same cadence a human eyeballing ExampleExchange' own chart at that timeframe would see. */
+/** Sprint 3 Task C, AC #4 (per-bar spot-check): one row per DISTINCT native-timeframe bar of the chosen filter — the same cadence a human eyeballing ExampleExchange's own chart at that timeframe would see. */
 export interface FilterDumpRow {
   /** FilterSignal.since — closeTime of the bar of the filter's OWN timeframe that produced this state. */
   sinceCloseTime: number;

@@ -116,7 +116,7 @@ describe('reconstructDealRungs — synthetic', () => {
 
 describe('reconstructDealRungs — real fixture, deal 1175749436 (Sprint 3 Task E)', () => {
   it('reconstructs all 4 real fills with the expected own price/size/notional', () => {
-    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages.html'), 'utf-8');
+    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages-long.html'), 'utf-8');
     const { events, errors } = parseTelegramEvents(html);
     expect(errors).toEqual([]);
 
@@ -139,7 +139,7 @@ describe('reconstructDealRungs — real fixture, deal 1175749436 (Sprint 3 Task 
   });
 
   it('shows the martingale ratio on real fills is close to 1.03, within the noise of 3-decimal ETH rounding', () => {
-    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages.html'), 'utf-8');
+    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages-long.html'), 'utf-8');
     const { events } = parseTelegramEvents(html);
     const rungs = reconstructDealRungs(events, '1175749436');
 
@@ -159,7 +159,7 @@ describe('reconstructDealRungs — real fixture, deal 1175749436 (Sprint 3 Task 
     // entryPrice). Rung 1 is therefore deliberately excluded from the
     // observed map — it's the anchor-defining rung, not an independently
     // validatable one. Only rungs 2-4 are scored.
-    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages.html'), 'utf-8');
+    const html = readFileSync(join(FIXTURES_DIR, 'telegram-data/messages-long.html'), 'utf-8');
     const { events } = parseTelegramEvents(html);
     const rungs = reconstructDealRungs(events, '1175749436');
 

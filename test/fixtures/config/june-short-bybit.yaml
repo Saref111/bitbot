@@ -1,0 +1,37 @@
+# Sprint 4 Task D — the real June SHORT×Bybit reference bot
+symbol: ETH/USDT:USDT
+direction: short
+exchange: bybit-futures
+testnet: true
+
+deposit_usdt: 100
+leverage: 10
+margin_mode: cross
+reinvest_pct: 0
+
+filter_calc: bar_close
+entry_filters:
+  - { indicator: RSI, timeframe: 1m, period: 14, op: '<', value: 50 }
+  - { indicator: RSI, timeframe: 5m, period: 14, op: '<', value: 50 }
+  - { indicator: RSI, timeframe: 30m, period: 14, op: '<', value: 50 }
+  - { indicator: RSI, timeframe: 1h, period: 14, op: '<', value: 55 }
+  - { indicator: CCI, timeframe: 5m, period: 20, op: '<', value: 70 }
+  - { indicator: CCI, timeframe: 15m, period: 20, op: '<', value: 75 }
+  - { indicator: CCI, timeframe: 1h, period: 20, op: '<', value: 80 }
+
+grid:
+  overlap_pct: 20
+  orders: 20
+  martingale_pct: 1
+  indent_pct: 0.02
+  log_distribution: 1
+  partial_placement: 3
+  runaway_cancel_pct: 0.1
+
+include_existing_position: false
+
+take_profit_pct: 0.75
+profit_currency: USDT
+trailing_take: null
+stop_loss: null
+halt_after_loss: false

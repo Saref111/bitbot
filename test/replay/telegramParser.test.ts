@@ -4,11 +4,11 @@ import { join } from 'node:path';
 import { parseTelegramEvents } from '../../src/replay/telegramParser.js';
 
 const HTML = readFileSync(
-  join(import.meta.dirname, '../fixtures/telegram-data/messages.html'),
+  join(import.meta.dirname, '../fixtures/telegram-data/messages-long.html'),
   'utf-8',
 );
 
-describe('parseTelegramEvents — Sprint 3 Task B, real fixture (test/fixtures/telegram-data/messages.html)', () => {
+describe('parseTelegramEvents — Sprint 3 Task B, real fixture (test/fixtures/telegram-data/messages-long.html)', () => {
   it('every dealId+timestamp terminator produces exactly one event or one error — the "без тихих помилок" invariant', () => {
     const { events, errors } = parseTelegramEvents(HTML);
     // 169 confirmed independently: grep -c on the terminator pattern, and

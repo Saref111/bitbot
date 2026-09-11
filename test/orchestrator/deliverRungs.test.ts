@@ -142,4 +142,29 @@ describe('deliverNextRungs (MVP §4.3: partial_placement K)', () => {
       clientOrderId: 'deal-1-1',
     });
   });
+
+  // Sprint 4 Task B: mirrors the LONG full-object test above with
+  // direction='short' — grid (entry-averaging) orders are `sell` for
+  // short, opposite of exit orders (buy). This is the one grid-order-side
+  // site (docs/SPRINT_4.md site 2) that had no SHORT test at all until now
+  // — a wrong or missing flip here opens a LONG position above market on a
+  // marketable taker fill instead of a short, silently.
+  it('SHORT: places orders with side sell (Sprint 4 Task B)', async () => {
+    const config = buildConfig({ direction: 'short', grid: { partial_placement: 1 } });
+    const gridOrders = [
+      row({ rungIndex: 1, clientOrderId: 'deal-1-1', price: 1905.34, size: 0.018 }),
+    ];
+    const adapter = makeMockAdapter();
+
+    await deliverNextRungs({ adapter, config, gridOrders, now: () => 6000 });
+
+    expect(adapter.createOrder).toHaveBeenCalledWith({
+      symbol: config.symbol,
+      side: 'sell',
+      type: 'limit',
+      amount: 0.018,
+      price: 1905.34,
+      clientOrderId: 'deal-1-1',
+    });
+  });
 });

@@ -18,6 +18,7 @@ import {
 import { recoverDeal } from '../../src/orchestrator/recoverDeal.js';
 import { pollUntil } from '../../src/orchestrator/pollUntil.js';
 import { buildConfig } from '../helpers/buildConfig.js';
+import { requireMinNotional } from '../helpers/fixtures.js';
 import type { ExchangeAdapter, OpenOrder } from '../../src/exchange/types.js';
 
 const SYMBOL = 'ETH/USDT:USDT';
@@ -67,7 +68,7 @@ describe('recoverDeal — reconcileOrphans against real testnet state (Sprint 3 
       // test — this scenario needs no real position at all.
       const market = await adapter.getMarketInfo(SYMBOL);
       const price = Math.round((lastClose * 0.5) / market.tickSize) * market.tickSize;
-      const amount = Math.ceil((market.minNotional * 1.5) / price / market.stepSize) * market.stepSize;
+      const amount = Math.ceil((requireMinNotional(market) * 1.5) / price / market.stepSize) * market.stepSize;
 
       const db = openDatabase();
       const config = buildConfig({ grid: { orders: 2, overlap_pct: 5, indent_pct: 0.2 } });
@@ -145,7 +146,7 @@ describe('recoverDeal — reconcileOrphans against real testnet state (Sprint 3 
       // a real LONG position (same trick as runDeal.test.ts).
       const fillPrice = Math.round(lastClose * 1.02 * 100) / 100;
       const amount =
-        Math.ceil((market.minNotional * 1.5) / fillPrice / market.stepSize) * market.stepSize;
+        Math.ceil((requireMinNotional(market) * 1.5) / fillPrice / market.stepSize) * market.stepSize;
 
       await adapter.createOrder({
         symbol: SYMBOL,

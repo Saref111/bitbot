@@ -8,9 +8,16 @@ import type { DeliverRungsParams, GridOrderMutation } from './types.js';
  * the resulting mutations so the caller (runDeal) can fold them into that
  * tick's single transaction alongside everything else (PLAN.md: one
  * transaction per tick).
+ *
+ * Sprint 4 Task A: grid-order side is `buy` for long, `sell` for short —
+ * these are the entry-averaging orders, opposite of the exit side in
+ * exitTargets.ts/gridPlacedTick.ts/adoptExistingPosition.ts. Read off
+ * `config.direction`, like every other grid parameter here — not a
+ * separate argument (see projectGrid.ts for why: same reasoning applies).
  */
 export async function deliverNextRungs(params: DeliverRungsParams): Promise<GridOrderMutation[]> {
   const { adapter, config, gridOrders, now } = params;
+  const side = config.direction === 'long' ? 'buy' : 'sell';
   const target = config.grid.partial_placement ?? config.grid.orders;
   const liveCount = gridOrders.filter((row) => row.status === 'placed').length;
   const slotsAvailable = target - liveCount;
@@ -26,7 +33,7 @@ export async function deliverNextRungs(params: DeliverRungsParams): Promise<Grid
   for (const rung of nextPending) {
     await adapter.createOrder({
       symbol: config.symbol,
-      side: 'buy',
+      side,
       type: 'limit',
       amount: rung.size,
       price: rung.price,

@@ -5,6 +5,7 @@ export function buildConfig(
     deposit_usdt?: number;
     leverage?: number;
     direction?: Config['direction'];
+    exchange?: Config['exchange'];
     grid?: Partial<GridConfig>;
     take_profit_pct?: number;
     stop_loss?: number | null;
@@ -16,7 +17,7 @@ export function buildConfig(
   return {
     symbol: 'ETH/USDT:USDT',
     direction: overrides.direction ?? 'long',
-    exchange: 'binance-futures',
+    exchange: overrides.exchange ?? 'binance-futures',
     testnet: false,
     deposit_usdt: overrides.deposit_usdt ?? 200,
     leverage: overrides.leverage ?? 3,

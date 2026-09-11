@@ -61,11 +61,15 @@ export async function adoptExistingPosition(
     openedAt: now(),
   });
 
+  // Sprint 4 Task A: exit side is `sell` for long, `buy` for short — same
+  // rule as exitTargets.ts/gridPlacedTick.ts, applied here for the adopted
+  // position's initial TP/SL.
+  const exitSide = config.direction === 'long' ? 'sell' : 'buy';
   const syntheticClientOrderId = `${dealId}-adopted`;
   const tpClientOrderId = `${dealId}-tp-0`;
   await adapter.createOrder({
     symbol: config.symbol,
-    side: 'sell',
+    side: exitSide,
     type: 'limit',
     amount: position.contracts,
     price: intent.takeProfitPrice,
@@ -77,7 +81,7 @@ export async function adoptExistingPosition(
     slClientOrderId = `${dealId}-sl-0`;
     await adapter.createOrder({
       symbol: config.symbol,
-      side: 'sell',
+      side: exitSide,
       type: 'limit',
       amount: position.contracts,
       price: intent.stopLossPrice,

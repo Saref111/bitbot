@@ -59,6 +59,47 @@ describe('makeGridExchangeReady — basic shape', () => {
   });
 });
 
+describe('makeGridExchangeReady — Bybit-style minQty check (Slice C2b: minNotional=null, independent constraint)', () => {
+  const bybitMarket = {
+    symbol: 'ETH/USDT:USDT',
+    tickSize: 0.01,
+    stepSize: 0.001,
+    minNotional: null,
+    minQty: 0.01,
+  };
+
+  it('rejects the WHOLE grid when a rung size falls below minQty, even though minNotional is null and skipped entirely', () => {
+    const plan = {
+      entryPrice: 2000,
+      rungs: [
+        { index: 1, depthPct: 0, price: 2000, notionalUsdt: 2000 * 0.02, size: 0.02, clientOrderId: 'd-1' },
+        { index: 2, depthPct: 0, price: 1900, notionalUsdt: 1900 * 0.005, size: 0.005, clientOrderId: 'd-2' },
+      ],
+    };
+
+    const result = makeGridExchangeReady(plan, bybitMarket);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected a rejection');
+    expect(result.reason).toMatch(/minQty/);
+    expect(result.rungIndex).toBe(2);
+  });
+
+  it('accepts a grid whose every rung size clears minQty', () => {
+    const plan = {
+      entryPrice: 2000,
+      rungs: [
+        { index: 1, depthPct: 0, price: 2000, notionalUsdt: 2000 * 0.02, size: 0.02, clientOrderId: 'd-1' },
+        { index: 2, depthPct: 0, price: 1900, notionalUsdt: 1900 * 0.015, size: 0.015, clientOrderId: 'd-2' },
+      ],
+    };
+
+    const result = makeGridExchangeReady(plan, bybitMarket);
+
+    expect(result.ok).toBe(true);
+  });
+});
+
 function syntheticPlan(price: number, size: number) {
   return {
     entryPrice: price,
@@ -81,6 +122,7 @@ describe('makeGridExchangeReady — rounding correctness', () => {
         tickSize,
         stepSize: 1,
         minNotional: 0,
+        minQty: null,
       });
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error('expected ok result');
@@ -101,6 +143,7 @@ describe('makeGridExchangeReady — rounding correctness', () => {
         tickSize: 1,
         stepSize,
         minNotional: 0,
+        minQty: null,
       });
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error('expected ok result');
@@ -150,6 +193,7 @@ const marketArb = fc.record({
   tickSize: fc.constantFrom(0.01, 0.1, 1, 0.001),
   stepSize: fc.constantFrom(0.001, 0.01, 0.1, 1),
   minNotional: fc.constant(0), // isolate the rounding property from the minNotional rejection
+  minQty: fc.constant(null),
 });
 
 describe('makeGridExchangeReady — property invariants', () => {
